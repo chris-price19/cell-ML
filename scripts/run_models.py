@@ -99,8 +99,8 @@ if torch.cuda.is_available() == True:
 else:
     pinning = False
 
-train_randloader = DataLoader(train_set, batch_size=bsize, shuffle=True, pin_memory = pinning)
-test_randloader = DataLoader(test_set, batch_size=bsize, shuffle=True, pin_memory = pinning)
+train_randloader = DataLoader(train_set, batch_size=bsize, shuffle=True, pin_memory = pinning, num_workers=4)
+test_randloader = DataLoader(test_set, batch_size=bsize, shuffle=True, pin_memory = pinning, num_workers=4)
 
 # print([i[1].detach().numpy() for i in test_randloader])
 
@@ -110,7 +110,7 @@ test_randloader = DataLoader(test_set, batch_size=bsize, shuffle=True, pin_memor
 ########### test basic CNN
 
 cnetmodel = ConvNet(train_randloader, test_randloader)
-lossL = cnetmodel.train(epochs = 5, bsize = bsize)
+lossL = cnetmodel.train(epochs = 50, bsize = bsize)
 
 trainloss, vsize, train_frac, c_matrix = cnetmodel.test(cnetmodel.train_data)
 testloss, vsize, test_frac, c_matrix = cnetmodel.test(cnetmodel.valid_data)
@@ -120,3 +120,41 @@ print('testing acc = %f' % test_frac)
 
 print('confusion matrix')
 print(c_matrix)
+
+
+
+# ### adding time series below
+# #################################
+
+# bsize = 10
+
+# train_set = single_cell_dataset(datadir +'images' + fs + 'data-images' + fs + 'train_series.zip')
+
+# test_set = single_cell_dataset(datadir +'images' + fs + 'data-images' + fs + 'test_series.zip')
+# if torch.cuda.is_available() == True:
+#     pinning = True
+# else:
+#     pinning = False
+
+# train_coherentsampler = time_coherent_sampler(datadir +'images' + fs + 'data-images' + fs + 'train_series.zip')
+# test_coherentsampler = time_coherent_sampler(datadir +'images' + fs + 'data-images' + fs + 'test_series.zip')
+
+# train_loader = DataLoader(train_set, batch_size=bsize*100, sampler=train_coherentsampler, pin_memory = pinning)
+# test_loader = DataLoader(test_set, batch_size=bsize*100, sampler=test_coherentsampler, pin_memory = pinning)
+
+# # print([i[1].detach().numpy() for i in test_randloader])
+
+# ########### test combined CNN LSTM
+# ### need new model class here.
+
+# cnetmodel = ConvNet(train_randloader, test_randloader)
+# lossL = cnetmodel.train(epochs = 10, bsize = bsize)
+
+# trainloss, vsize, train_frac, c_matrix = cnetmodel.test(cnetmodel.train_data)
+# testloss, vsize, test_frac, c_matrix = cnetmodel.test(cnetmodel.valid_data)
+
+# print('training acc = %f' % train_frac)
+# print('testing acc = %f' % test_frac)
+
+# print('confusion matrix')
+# print(c_matrix)

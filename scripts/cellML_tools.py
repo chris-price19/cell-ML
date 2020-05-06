@@ -213,7 +213,7 @@ class ConvNet:
 
         self.loss_fn = torch.nn.CrossEntropyLoss(reduction='mean')
     
-        self.optimizer = torch.optim.Adam(self.net.parameters(), lr=1e-1)
+        self.optimizer = torch.optim.Adam(self.net.parameters(), lr=5e-2)
 
     def train(self, epochs, bsize = 128):
         
@@ -264,16 +264,22 @@ class ConvNet:
         total = 0.
         loss = 0.
         
-        total = len(np.vstack([i[1].detach().numpy() for i in valid_data]))
-        print(total)
-        u, c = np.unique(total)
+        total = np.vstack([i[1].detach().numpy() for i in valid_data])
+        u, c = np.unique(total, return_counts=True)
+        print(u)
+        print(c)
+        total = len(total)
         class_dim = len(u)
+        print(class_dim)
         # class_dim = len(np.unique([i[1].item() for i in valid_data]))
         print('class balance')
         print(c / np.sum(c))
+
         c_matrix = np.zeros((class_dim, class_dim))
         
         for it, (images, labels, ids) in enumerate(valid_data):
+
+            images = (images - images.mean(dim=0)) / (images.std(dim=0) + 1e-8)
 
             images, labels = images.to(self.device), labels.to(self.device)
 
