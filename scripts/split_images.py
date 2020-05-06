@@ -59,12 +59,11 @@ for fi, ff in enumerate(files):
 	# print(maxtime)
 	for ii in np.arange(maxtime):
 
-		fname = filebase + '_' + str(ii) +'of' + str(maxtime) + '.png'
+		fname = filebase + '_' + str(ii+1) +'of' + str(maxtime) + '.png'
 		image.seek(ii)
 
 		# flip image vertically, now bottom left corner of the image corresponds to origin of position in track-data.
-		frame = image.copy().transpose(pimage.FLIP_TOP_BOTTOM).convert('LA')
-
+		frame = image.copy().transpose(pimage.FLIP_TOP_BOTTOM).convert('L')
 	
 		frame.save(fname)
 	
