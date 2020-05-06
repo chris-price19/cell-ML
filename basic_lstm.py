@@ -15,10 +15,10 @@ from sklearn.preprocessing import LabelEncoder
 from sklearn.preprocessing import OneHotEncoder
 from numpy import array
 from numpy.random import choice
-
+import matplotlib.pyplot as plt
 data = pd.read_csv("C:\\Users\\as036\\.spyder-py3\\cellvector2.csv")
 
-
+torch.cuda.device_count()
 
 
 
@@ -32,12 +32,29 @@ setup9 = df.replace({'env':drugmap,'plastic':mapping,'assay':assaymap})
 new_map = {'DMSO':0,'GM6001':1,'CK-666':2,'B1':3,'IgG':4,'NSC23766':5,'Y27632':6,'dH20':7,'Drug Z':8,'Bleb':9,'Lata':10,'Mar':11}
 setup9 = setup9.replace({'env':new_map})
 '''
-is_hol = setup9['env'] == 'dH20'
-set_try = setup9[is_hol]
+finalup = setup9['env'] == 2
+setit = setup9[finalup]
+for i in range(4):
+    setup9 = setup9.append(setit)
+'''
+print(setup9['time_int'].unique())
+is_hol = setup9
+print(is_hol['env'].value_counts())
+nextup = is_hol[(is_hol['plastic'] == 2)]
 
-nextup = setup9['plastic'] == 0
+#trippyred = nextup[(nextup['time_int'] == 10)]
+
+#print(is_hol['assay'].unique())
+
+'''
+time.sleep(10)
 set_try = setup9[is_hol]
-set_up = setup9[nextup]
+set_up = set_try[nextup]
+finalup = set_up['plastic'] == 2
+set_up = set_up[finalup]
+print(set_up['assay'].unique())
+
+
 print(set_try['assay'].value_counts())
 print(set_up['assay'].value_counts())
 for i in range(4):
@@ -46,12 +63,12 @@ for i in range(2):
     setup9 = setup9.append(set_up)
 '''
 
-vectormaker = pd.DataFrame(setup9, columns = ['stepsize','spheric','ellipticO','ellipticP','area','volume','env','plastic','assay','trackID','time_int'])
+vectormaker = pd.DataFrame(nextup, columns = ['stepsize','spheric','ellipticO','ellipticP','area','volume','env','plastic','assay','trackID','time_int'])
 #reps = [3 if val == 0 else 1 for val in df]
 standardize_this = ['stepsize','spheric','ellipticO','ellipticP','area','volume']
 
 vectormaker[standardize_this] = (vectormaker[standardize_this]-vectormaker[standardize_this].min())/(vectormaker[standardize_this].max()-vectormaker[standardize_this].min())
-print(len(vectormaker['assay'].unique()))
+
 
 checkplastic = pd.DataFrame(vectormaker, columns = ['plastic'])
 
@@ -61,11 +78,11 @@ checkenv = pd.DataFrame(vectormaker, columns = ['env'])
 del setup9
 del df
 del data
+print("boom boom")
+print(vectormaker['env'].value_counts())
+print(vectormaker['assay'].unique())
 
-print(vectormaker)
 
-
-lags = 8
 
 
 
@@ -97,8 +114,7 @@ class myRNN(nn.Module):
         
         self.epochs = epochs
         self.xshape = list(self.dataset()[0][-1].size())[0]
-        print(self.xshape)
-        print(self.dataset()[1][-1].shape)
+        
         self.yshape = self.dataset()[1][-1].shape
         
         #self.yshape = 
@@ -107,9 +123,9 @@ class myRNN(nn.Module):
         self.random = np.random.randint(0,1332-self.lags)
        
         #second number here must be the dimension of the output, in softmax terms true for self.finalweights, self.final_layer
-        self.finalweights = Variable(torch.zeros(1,3).type(self.dtype),requires_grad=True)
+        self.finalweights = Variable(torch.zeros(1,11).type(self.dtype),requires_grad=True)
         
-        self.final_layer = Variable(self.gloroti(self.layers[1],3).type(self.dtype),requires_grad=True)
+        self.final_layer = Variable(self.gloroti(self.layers[1],11).type(self.dtype),requires_grad=True)
         
         #weight of forget gate h 
         self.w_fgateh = Variable(torch.eye(self.layers[1]).type(self.dtype),requires_grad=True)
@@ -135,7 +151,11 @@ class myRNN(nn.Module):
         #i gate bias
         self.w_ibias = Variable(torch.zeros(1,self.layers[1]).type(self.dtype),requires_grad=True)
         #kk
-        self.optimizer = torch.optim.SGD([self.final_layer,
+        self.linearlayer = Variable(self.gloroti(25,11).type(self.dtype),requires_grad=True)
+        self.finallayer= Variable(self.gloroti(25,11).type(self.dtype),requires_grad=True)
+        self.linearbias = Variable(torch.zeros(1,11).type(self.dtype),requires_grad=True)
+        self.finalbias = Variable(torch.zeros(1,11).type(self.dtype),requires_grad=True)
+        self.optimizer = torch.optim.Adam([self.final_layer,
 self.finalweights,
 self.w_fgateh,
 self.w_fgatex,
@@ -147,7 +167,9 @@ self.w_tbias,
 self.w_iweighth,
 self.g_fgatex,
 self.f_fgatex,
-self.w_ibias],lr = 5e-5 )
+self.linearlayer,
+self.finallayer,
+self.w_ibias],lr = 2.5e-5 )
         self.loss = nn.CrossEntropyLoss().cuda()
     def one_hotenc(self):
         data = ['DMSO','GM6001','CK-666','B1','IgG','NSC23766','Y27632','dH20','Drug Z','Bleb','Lata','Mar']
@@ -186,8 +208,9 @@ self.w_ibias],lr = 5e-5 )
         checkplas = torch.zeros(self.lags, 24, 1)
         checkenv = torch.zeros(self.lags, 24, 1)
         for j in range(24):
+            
             i = random.choices(self.x['assay'].unique(),
-            weights = [f,f,f,f,f,f,0,0,0,0,0,0,0,0],
+            weights = [1,1,1,1,1,1,1,1,1,1,1,1],
             k = 1)
             setup1 = vectormaker['assay'] == float(i[0])
             setup1 = vectormaker[setup1]     
@@ -224,7 +247,7 @@ self.w_ibias],lr = 5e-5 )
             
             check_plas = torch.from_numpy(check_plas.to_numpy())
             
-            
+           
             check_env = torch.from_numpy(check_env.to_numpy())
 
             check_plas = check_plas.type(torch.cuda.FloatTensor)
@@ -257,6 +280,7 @@ self.w_ibias],lr = 5e-5 )
         h=torch.zeros(g1.shape[1],self.layers[1]).type(self.dtype)
         C_t = torch.zeros((g1.shape[1],self.layers[1])).type(self.dtype)
         
+        
         for i in range(self.lags):
             f_t = torch.sigmoid(torch.matmul(h,self.w_fgateh)+torch.matmul(g1[i,:,:],self.w_fgatex)+self.b_fgate)
             i_t = torch.sigmoid(torch.matmul(h,self.w_iweighth)+torch.matmul(g1[i,:,:],self.g_fgatex)+self.w_ibias)
@@ -269,12 +293,15 @@ self.w_ibias],lr = 5e-5 )
             
             
             
+            
                 
         
         h =  torch.matmul(h,self.final_layer)+self.finalweights
         
+        #h = torch.matmul(h,self.linearlayer)+self.linearbias
+        #h = torch.matmul(h,self.finallayer)+self.finalbias
+        #h = F.relu(torch.matmul(h,self.finallayer)+self.finalbias)
         
-    
         h = torch.nn.Softmax(dim=1)(h)
         
         
@@ -295,19 +322,23 @@ self.w_ibias],lr = 5e-5 )
         return acc
     def descendagradient(self):
         j = 0
+        track = np.zeros((int(self.epochs/100),1))
+        graph = np.zeros((int(self.epochs/100),1))
+        bins = np.arange(0,int(self.epochs/100),1)
         for i in range(self.epochs):
             loader = (self.dataset())
             
             inpt = self.forwardpass(loader[0])
             
             
-            loss = self.lossy(inpt,loader[1])    
+            loss = self.lossy(inpt,loader[2])    
+            
             loss.backward()
             self.optimizer.step()
             self.optimizer.zero_grad()
 
             j += 1
-            if i % 10 == 0:
+            if (i+1)% 10 == 0:
                 print("Loss",loss.cpu().item(), "at iteration", j)
                 print("low plasticity" , loader[1][:,0].sum())
                 print("")
@@ -315,19 +346,40 @@ self.w_ibias],lr = 5e-5 )
                 print("")
                 print("high plasticity", loader[1][:,2].sum())
                 print("")
-                print(inpt[0:5].detach().cpu().numpy())
-                print( "Current Accuracy" , self.accuracycheck(loader[0], loader[1])[0])
             
+                print(inpt[0].detach().cpu().numpy())
+                
+                
+                
+                print( "Current Accuracy" , self.accuracycheck(loader[0], loader[2])[0])
+                print("Confusion Matrix")
+                track[int((i+1)/100-1)]= (loss.detach().cpu().numpy())/24
+                
+                print(self.accuracycheck(loader[0], loader[2])[2])
+
+                graph[int((i+1)/100-1)] = self.accuracycheck(loader[0], loader[2])[0]
+            
+        return graph, bins, track
+
     def accuracycheck(self, x, y ):
         loader = self.forwardpass(x).detach().cpu().numpy()
+        
         checker = np.zeros((loader.shape))
-        idx = np.zeros((len(loader)))
+        idx = np.zeros((len(loader[0])))
         summable = 0
+        confused = np.zeros((len(loader[0])+1,len(loader[0])+1))
+        
+        
         for i in range(len(loader)):
             idx = np.argmax(loader[i])
+            
+            pdx = np.argmax(y[i])
+            
             checker[i, idx] = 1  
+            confused[idx][pdx] += 1
             if y[i, idx] == 1:
                 summable += 1
+        
                 
             
         
@@ -335,7 +387,7 @@ self.w_ibias],lr = 5e-5 )
 
         
         
-        return summable, checker
+        return summable, checker, confused
 
         
             
@@ -343,8 +395,15 @@ self.w_ibias],lr = 5e-5 )
         
 # first layer must be the dimensionality of the data, 
 #first input is data, second is lags, third is one neural layer, last is epochs
-rnn = myRNN(vectormaker,4,[6,25],10000)
+rnn = myRNN(vectormaker,8  ,[6,80],10000)
 
 
 
-rnn.descendagradient()
+
+graph, bins, track = rnn.descendagradient()
+fig, ax = plt.subplots()
+
+jones = ax.plot(bins, graph, '-r', color ='green', label = 'training accuracy')
+mike = ax.plot(bins, track, '-r', color = 'blue', label = 'loss function')
+plt.title('Accuracy vs Training')
+plt.show()
