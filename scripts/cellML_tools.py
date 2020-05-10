@@ -15,6 +15,7 @@ import matplotlib.pyplot as plt
 
 import torch
 from torch.utils.data import Sampler, Dataset, DataLoader, ConcatDataset
+from torch.autograd import Variable
 from torchvision import transforms, utils
 import timeit
 
@@ -132,7 +133,7 @@ class time_coherent_sampler(Sampler):
         n = len(self.unique)
         
         # unweighted
-        # cinds = torch.randint(high=n, size=(self.bsize,)).numpy()
+        # cinds = torch.randint(high=n, size=(n,)).numpy()
         ## ############
         # print(cinds)
 
@@ -146,13 +147,14 @@ class time_coherent_sampler(Sampler):
             ccount += 1
             
             if ccount == self.bsize:
-                print(self.allinds)
+                # print(self.allinds)
                 yield self.allinds
                 self.allinds = []
                 ccount = 0
         
         if len(self.allinds) > 0:
-            yield self.allinds.tolist()
+            yield self.allinds
+
         # print(np.sum((np.diff(self.allinds)>1)))
         
         # return iter(self.allinds)
@@ -186,7 +188,7 @@ class ConvNet:
     
         self.optimizer = torch.optim.Adam(self.net.parameters(), lr=5e-2)
 
-    def train(self, epochs, bsize = 128):
+    def train(self, epochs): #, bsize = 128):
         
 #         bsize = int(np.ceil(len(traindata) * batch_pct))
         # self.train_loader = DataLoader(self.train_data, batch_size=bsize, shuffle=True)
@@ -254,7 +256,7 @@ class ConvNet:
         
         for it, (images, labels, ids) in enumerate(valid_data):
 
-            images = (images - images.mean(dim=0)) / (images.std(dim=0) + 1e-8)
+            images = ((images - images.mean(dim=0)) / (images.std(dim=0) + 1e-8)).float()
 
             images, labels = images.to(self.device), labels.to(self.device)
 
@@ -277,6 +279,183 @@ class ConvNet:
         # print(total)
         
         return loss, total, (correct / total), c_matrix
+
+
+
+class ConvPlusLSTM:
+    # Initialize the class
+    def __init__(self, train_data, valid_data, nlags, hidden_dim):
+
+        if torch.cuda.is_available() == True:
+            self.dtype_double = torch.cuda.FloatTensor
+            self.dtype_int = torch.cuda.LongTensor
+            self.device = torch.device("cuda:0") 
+            # cudnn.benchmark = True
+        else:
+            self.dtype_double = torch.FloatTensor
+            self.dtype_int = torch.LongTensor
+            self.device = torch.device("cpu")
+        
+        # print(self.dtype_double)
+        self.train_data = train_data
+        # pass in data loader
+        self.valid_data = valid_data
+
+        self.cnet = convOnly().float().to(self.device) #type(self.dtype_double)
+        
+        self.x_dim = 2048
+        self.y_dim = 3
+        self.nlags = nlags
+
+        self.lstm = LSTM(self.x_dim, self.y_dim, self.nlags, hidden_dim).to(self.device)
+
+        self.loss_fn = torch.nn.CrossEntropyLoss(reduction='mean')
+    
+        self.combo_optimizer = (
+            torch.optim.Adam(list(self.cnet.parameters()) 
+            + [self.lstm.W_f, self.lstm.W_i, self.lstm.W_C, self.lstm.W_o, self.lstm.U_f, self.lstm.U_i, self.lstm.U_C, self.lstm.U_o, self.lstm.b_i, self.lstm.b_f, self.lstm.b_C, self.lstm.b_o, self.lstm.V, self.lstm.bias_out], lr=5e-2)
+        )
+
+    def train(self, epochs): #, bsize = 128):
+        
+#         bsize = int(np.ceil(len(traindata) * batch_pct))
+        # self.train_loader = DataLoader(self.train_data, batch_size=bsize, shuffle=True)
+        losslist = []
+        
+        start_time = timeit.default_timer()
+        for epoch in range(epochs):
+     
+            for it, (images, labels, ids) in enumerate(self.train_data):
+                
+                unq, cnt = np.unique(ids[0], return_counts=True)
+                batch_lags = np.sum(cnt - self.nlags+1)
+                # print(batch_lags)
+
+                self.combo_optimizer.zero_grad()
+
+                # pixel-wise standardization in each batch
+                images = ((images - images.mean(dim=0)) / (images.std(dim=0) + 1e-8)).float()
+
+                images, labels = images.to(self.device), labels.to(self.device)
+
+                # print(images.dtype)
+                                
+                outputs = self.cnet.forward_pass(images)
+
+                restack = []
+                laglabels = []
+                
+                li = 0
+                for ui, uu in enumerate(unq):
+                    ci = 0
+                    while ci < cnt[ui] - self.nlags + 1:
+                        restack.append(outputs[li:li+self.nlags,:])
+                        laglabels.append(labels[li])
+                        ci += 1
+                        li += 1
+                    li += self.nlags-1
+                # print(restack)
+                laglabels = torch.stack(laglabels)
+                inputs = torch.stack(restack, dim = 1)
+                # print(inputs.shape)
+                LSTMoutputs = self.lstm.forward_pass(inputs)
+                # print(LSTMoutputs.shape)
+
+                loss = self.loss_fn(LSTMoutputs, laglabels.squeeze().long())
+                losslist.append(loss)
+
+                loss.backward()
+                
+                self.combo_optimizer.step()
+
+                if it % 20 == 0:
+                    print(losslist[-1])
+            
+            elapsed = timeit.default_timer() - start_time
+            start_time = timeit.default_timer()
+            print('Epoch %d: %f s' % (epoch, elapsed))
+
+        return losslist
+
+    def test(self, valid_data):
+
+        correct = 0.
+        total = 0.
+        loss = 0.
+        
+        total = np.vstack([i[1].detach().numpy() for i in valid_data])
+        u, c = np.unique(total, return_counts=True)
+        print(u)
+        print(c)
+        total = len(total)
+        class_dim = len(u)
+        print(class_dim)
+        # class_dim = len(np.unique([i[1].item() for i in valid_data]))
+        print('class balance')
+        print(c / np.sum(c))
+
+        c_matrix = np.zeros((class_dim, class_dim))
+        
+        for it, (images, labels, ids) in enumerate(valid_data):
+            
+            unq, cnt = np.unique(ids[0], return_counts=True)
+            batch_lags = np.sum(cnt - self.nlags+1)
+            # pixel-wise standardization in each batch
+            images = ((images - images.mean(dim=0)) / (images.std(dim=0) + 1e-8)).float()
+
+            images, labels = images.to(self.device), labels.to(self.device)
+                            
+            outputs = self.cnet.forward_pass(images)
+
+            restack = []
+            laglabels = []
+            
+            li = 0
+            for ui, uu in enumerate(unq):
+                ci = 0
+                while ci < cnt[ui] - self.nlags + 1:
+                    restack.append(outputs[li:li+self.nlags,:])
+                    laglabels.append(labels[li])
+                    ci += 1
+                    li += 1
+                li += self.nlags-1
+            # print(restack)
+            laglabels = torch.stack(laglabels)
+            inputs = torch.stack(restack, dim = 1)
+
+            LSTMoutputs = self.lstm.forward_pass(inputs)
+
+            loss = self.loss_fn(LSTMoutputs, laglabels.squeeze().long())
+#             print(loss)
+            _, predicted = torch.max(LSTMoutputs, dim=1) # .detach().numpy()
+
+            labels = laglabels.cpu().detach().numpy()
+            predicted = predicted.unsqueeze(1).cpu().detach().numpy()
+            correct += (predicted == labels).sum()
+            # print(type(correct))
+            
+            for ai in np.arange(class_dim):
+                for pi in np.arange(class_dim):
+                    c_matrix[pi,ai] += np.sum([(predicted == ai) & (labels == pi)])
+
+        # print(correct)
+        # print(total)
+        
+        return loss, total, (correct / total), c_matrix
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -333,4 +512,4 @@ if __name__ == "__main__":
 ########### test basic CNN
 
     cnetmodel = ConvNet(train_randloader, test_randloader) #, testdata)
-    lossL = cnetmodel.train(epochs = 5, bsize = bsize)
+    lossL = cnetmodel.train(epochs = 5)

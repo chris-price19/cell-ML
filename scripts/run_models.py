@@ -18,7 +18,7 @@ from torch.utils.data import Sampler, Dataset, DataLoader, ConcatDataset, Weight
 from torchvision import transforms, utils
 import timeit
 
-# from torch.autograd import Variable,grad
+from torch.autograd import Variable
 import pandas as pd
 from skimage.transform import resize
 
@@ -100,35 +100,31 @@ for ti, tt in enumerate(testfiles):
 zipTest.close()
 #################################
 
-bsize = 256 * 2
-pattern = ['_L','_M','_H']
-
-train_set = single_cell_dataset(datadir +'images' + fs + 'data-images' + fs + 'train_series.zip')
-wghts = train_set.get_class_weights(pattern)
-# print(wghts[0:10])
-# print(wghts[20000])
-# sys.exit()
-train_sampler = WeightedRandomSampler(torch.from_numpy(wghts), len(wghts))
-
-test_set = single_cell_dataset(datadir +'images' + fs + 'data-images' + fs + 'test_series.zip')
-wghts = test_set.get_class_weights(pattern)
-
-test_sampler = WeightedRandomSampler(torch.from_numpy(wghts), len(wghts))
-
-if torch.cuda.is_available() == True:
-    pinning = True
-else:
-    pinning = False
-
-train_randloader = DataLoader(train_set, batch_size=bsize, sampler = train_sampler, pin_memory = pinning) #, num_workers= 4) #  shuffle=True,
-test_randloader = DataLoader(test_set, batch_size=bsize,  sampler = test_sampler, pin_memory = pinning) #, num_workers=4) # shuffle=True,
-
-# print([i[1].detach().numpy() for i in test_randloader])
-
-# sys.exit()
-
 
 ########### test basic CNN
+
+# bsize = 256 * 2
+# pattern = ['_L','_M','_H']
+
+# train_set = single_cell_dataset(datadir +'images' + fs + 'data-images' + fs + 'train_series.zip')
+# wghts = train_set.get_class_weights(pattern)
+# # print(wghts[0:10])
+# # print(wghts[20000])
+# # sys.exit()
+# train_sampler = WeightedRandomSampler(torch.from_numpy(wghts), len(wghts))
+
+# test_set = single_cell_dataset(datadir +'images' + fs + 'data-images' + fs + 'test_series.zip')
+# wghts = test_set.get_class_weights(pattern)
+
+# test_sampler = WeightedRandomSampler(torch.from_numpy(wghts), len(wghts))
+
+# if torch.cuda.is_available() == True:
+#     pinning = True
+# else:
+#     pinning = False
+
+# train_randloader = DataLoader(train_set, batch_size=bsize, sampler = train_sampler, pin_memory = pinning) #, num_workers= 4) #  shuffle=True,
+# test_randloader = DataLoader(test_set, batch_size=bsize,  sampler = test_sampler, pin_memory = pinning) #, num_workers=4) # shuffle=True,
 
 # cnetmodel = ConvNet(train_randloader, test_randloader)
 # lossL = cnetmodel.train(epochs = 1, bsize = bsize)
@@ -147,7 +143,7 @@ test_randloader = DataLoader(test_set, batch_size=bsize,  sampler = test_sampler
 # ### adding time series below
 # #################################
 
-bsize = 10
+bsize = 20
 
 train_set = single_cell_dataset(datadir +'images' + fs + 'data-images' + fs + 'train_series.zip')
 test_set = single_cell_dataset(datadir +'images' + fs + 'data-images' + fs + 'test_series.zip')
@@ -156,8 +152,14 @@ print(len(train_set))
 
 if torch.cuda.is_available() == True:
     pinning = True
+    # self.dtype_double = torch.cuda.FloatTensor
+    # self.dtype_int = torch.cuda.LongTensor
+    # self.device = torch.device("cuda:0")            
 else:
     pinning = False
+    # self.dtype_double = torch.FloatTensor
+    # self.dtype_int = torch.LongTensor
+    # self.device = torch.device("cpu")
 
 train_coherentsampler = time_coherent_sampler(train_set, bsize = bsize)
 test_coherentsampler = time_coherent_sampler(test_set,  bsize = bsize)
@@ -165,35 +167,26 @@ test_coherentsampler = time_coherent_sampler(test_set,  bsize = bsize)
 train_loader = DataLoader(train_set, batch_sampler = train_coherentsampler, pin_memory = pinning)
 test_loader = DataLoader(test_set, batch_sampler = test_coherentsampler, pin_memory = pinning)
 
-print('start')
-# print(len(train_coherentsampler.unique))
-# 
-# for (i1, j2, k3) in train_loader:
-for ii, (images, labels, ids) in enumerate(train_loader):
+###################################
+
+# for ii, (images, labels, ids) in enumerate(train_loader):
     
-    print(ii)
-    # print(len(np.unique(ids[0].numpy())))
+#     print(ii)
 
-
-    # if ii < 4:
-
-    #     print(ids)
-
-    # else:
-
-    #     sys.exit()
 
 # ########### test combined CNN LSTM
 # ### need new model class here.
+nlags = 6
 
-# cnetmodel = ConvNet(train_randloader, test_randloader)
-# lossL = cnetmodel.train(epochs = 10, bsize = bsize)
+cnetLSTMmodel = ConvPlusLSTM(train_loader, test_loader, nlags, 20)
 
-# trainloss, vsize, train_frac, c_matrix = cnetmodel.test(cnetmodel.train_data)
-# testloss, vsize, test_frac, c_matrix = cnetmodel.test(cnetmodel.valid_data)
+lossL = cnetLSTMmodel.train(epochs = 1)
 
-# print('training acc = %f' % train_frac)
-# print('testing acc = %f' % test_frac)
+trainloss, vsize, train_frac, c_matrix = cnetLSTMmodel.test(cnetLSTMmodel.train_data)
+testloss, vsize, test_frac, c_matrix = cnetLSTMmodel.test(cnetLSTMmodel.valid_data)
 
-# print('confusion matrix')
-# print(c_matrix)
+print('training acc = %f' % train_frac)
+print('testing acc = %f' % test_frac)
+
+print('confusion matrix')
+print(c_matrix)

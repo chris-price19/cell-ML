@@ -16,7 +16,11 @@ from sklearn.preprocessing import OneHotEncoder
 from numpy import array
 from numpy.random import choice
 import matplotlib.pyplot as plt
-data = pd.read_csv("C:\\Users\\as036\\.spyder-py3\\cellvector2.csv")
+
+
+# data = pd.read_csv("C:\\Users\\as036\\.spyder-py3\\cellvector2.csv")
+
+data = pd.read_csv("C:\\Users\\Chris Price\\Box Sync\\Plasticity_Protrusions_ML\\images\\track-data\\cellDF_cleaned_exp_v2.csv")
 
 
 
@@ -32,9 +36,9 @@ setup9 = df.replace({'env':drugmap,'plastic':mapping,'assay':assaymap})
 new_map = {'DMSO':0,'GM6001':1,'CK-666':2,'B1':3,'IgG':4,'NSC23766':5,'Y27632':6,'dH20':7,'Drug Z':8,'Bleb':9,'Lata':10,'Mar':11}
 setup9 = setup9.replace({'env':new_map})
 
-is_hol = setup9[(setup9['env'] == 0) &(setup9['plastic'] != 1)]
+#is_hol = setup9[(setup9['env'] == 0) &(setup9['plastic'] != 1)]
 
-print(is_hol['assay'].unique())
+#print(is_hol['assay'].unique())
 '''
 time.sleep(10)
 set_try = setup9[is_hol]
@@ -52,7 +56,7 @@ for i in range(2):
     setup9 = setup9.append(set_up)
 '''
 
-vectormaker = pd.DataFrame(is_hol, columns = ['stepsize','spheric','ellipticO','ellipticP','area','volume','env','plastic','assay','trackID','time_int'])
+vectormaker = pd.DataFrame(setup9, columns = ['stepsize','spheric','ellipticO','ellipticP','area','volume','env','plastic','assay','trackID','time_int'])
 #reps = [3 if val == 0 else 1 for val in df]
 standardize_this = ['stepsize','spheric','ellipticO','ellipticP','area','volume']
 
@@ -95,6 +99,7 @@ class myRNN(nn.Module):
             
         else:
             self.dtype = torch.FloatTensor
+            self.device = 'cpu'
             
             
         self.x = x
@@ -113,9 +118,9 @@ class myRNN(nn.Module):
         self.random = np.random.randint(0,1332-self.lags)
        
         #second number here must be the dimension of the output, in softmax terms true for self.finalweights, self.final_layer
-        self.finalweights = Variable(torch.zeros(1,3).type(self.dtype),requires_grad=True)
+        self.finalweights = Variable(torch.zeros(1,10).type(self.dtype),requires_grad=True)
         
-        self.final_layer = Variable(self.gloroti(self.layers[1],3).type(self.dtype),requires_grad=True)
+        self.final_layer = Variable(self.gloroti(self.layers[1],10).type(self.dtype),requires_grad=True)
         
         #weight of forget gate h 
         self.w_fgateh = Variable(torch.eye(self.layers[1]).type(self.dtype),requires_grad=True)
@@ -142,15 +147,17 @@ class myRNN(nn.Module):
         self.w_ibias = Variable(torch.zeros(1,self.layers[1]).type(self.dtype),requires_grad=True)
         #kk
         
-        self.Conv1 = nn.Conv2d(1, self.lay[0], kernel_size=(1,3), stride = 1).cuda()
-        self.Conv2 = nn.Conv2d(self.lay[0], self.lay[1], kernel_size=(1,2), stride = 1).cuda()
-        self.Conv3 = nn.Conv2d(self.lay[1], self.lay[2], kernel_size=(1,2), stride = 1).cuda()
-        self.Conv4 = nn.Conv2d(self.lay[2], self.lay[3], kernel_size=(1,2), stride = 1).cuda()
-        self.maxpool = nn.MaxPool2d(2, stride = 2).cuda()
+        self.Conv1 = nn.Conv2d(1, self.lay[0], kernel_size=(1,3), stride = 1)#.cuda()
+        self.Conv2 = nn.Conv2d(self.lay[0], self.lay[1], kernel_size=(1,2), stride = 1)#.cuda()
+        self.Conv3 = nn.Conv2d(self.lay[1], self.lay[2], kernel_size=(1,2), stride = 1)#.cuda()
+        self.Conv4 = nn.Conv2d(self.lay[2], self.lay[3], kernel_size=(1,2), stride = 1)#.cuda()
+        self.maxpool = nn.MaxPool2d(2, stride = 2)#.cuda()
+        self.linearlayer = nn.Linear(10,10)#.cuda()
+        self.finallayer = nn.Linear(10,3)#.cuda()
         
-        self.params = list(self.Conv1.parameters()) + list(self.Conv2.parameters()) + list(self.Conv3.parameters()) + list(self.Conv4.parameters())
+        self.params = list(self.Conv1.parameters()) + list(self.Conv2.parameters()) + list(self.Conv3.parameters()) + list(self.Conv4.parameters())+list(self.linearlayer.parameters())+list(self.finallayer.parameters())
         self.optimizeruno = torch.optim.Adam(self.params,lr=2.5e-4)
-        self.optimizer = torch.optim.SGD([self.final_layer,
+        self.optimizer = torch.optim.Adam([self.final_layer,
 self.finalweights,
 self.w_fgateh,
 self.w_fgatex,
@@ -163,8 +170,8 @@ self.w_iweighth,
 self.g_fgatex,
 self.f_fgatex,
 self.w_ibias,
-],lr = 2.5e-4 )
-        self.loss = nn.CrossEntropyLoss().cuda()
+],lr = 2.5e-3 )
+        self.loss = nn.CrossEntropyLoss() #.cuda()
     def one_hotenc(self):
         data = ['DMSO','GM6001','CK-666','B1','IgG','NSC23766','Y27632','dH20','Drug Z','Bleb','Lata','Mar']
         values = array(data)
@@ -183,7 +190,7 @@ self.w_ibias,
         weights = np.random.normal(0,np.sqrt(2/(input_layer+output_layer)),input_layer)
         weights = np.repeat(weights, output_layer)
         weights = torch.tensor(weights, requires_grad=True).to(self.device)
-        weights = weights.type(torch.cuda.FloatTensor).resize(input_layer,output_layer)
+        weights = weights.type(torch.FloatTensor).resize(input_layer,output_layer)
         return(weights) 
     def dataset(self):
         g = np.arange(0,12,1)
@@ -204,7 +211,7 @@ self.w_ibias,
         for j in range(24):
             
             i = random.choices(self.x['assay'].unique(),
-            weights = [f,f,f,f,f,f,l,l,l,l,l],
+            weights = [f,f,f,f,f,f,l,l,l,l,l,l,l,l],
             k = 1)
             setup1 = vectormaker['assay'] == float(i[0])
             setup1 = vectormaker[setup1]     
@@ -237,16 +244,16 @@ self.w_ibias,
             #this line must match whatever data you are training against. 
             setup5 = pd.DataFrame(setup5, columns = ['stepsize','spheric','ellipticO','ellipticP','area','volume'])
             setup5 = torch.from_numpy(setup5.to_numpy())
-            setup5 = setup5.type(torch.cuda.FloatTensor)
+            setup5 = setup5.type(torch.FloatTensor)
             
             check_plas = torch.from_numpy(check_plas.to_numpy())
             
             
             check_env = torch.from_numpy(check_env.to_numpy())
 
-            check_plas = check_plas.type(torch.cuda.FloatTensor)
+            check_plas = check_plas.type(torch.FloatTensor)
             
-            check_env = check_env.type(torch.cuda.FloatTensor)
+            check_env = check_env.type(torch.FloatTensor)
             minibatch[j,:,:,:] = setup5.unsqueeze(dim=0)
             checkplas[:,j,:] = check_plas
             
@@ -270,26 +277,29 @@ self.w_ibias,
         
         return (minibatch, encode_plas, encode_env)
     def forwardpass(self, g1):
-
-        h=torch.zeros(g1.shape[1],self.layers[1]).type(self.dtype)
+        
+        h=torch.zeros(g1.shape[0],self.layers[1]).type(self.dtype)
         C_t = torch.zeros((g1.shape[1],self.layers[1])).type(self.dtype)
-        print(g1.shape)
+        
         g1 = F.relu(self.Conv1(g1))
-        print(g1.shape)
+        
         g1 = F.relu(self.Conv2(g1))
-        print(g1.shape)
+        
         g1= F.relu(self.Conv3(g1))
-        print(g1.shape)
+        
         g1 = F.relu(self.Conv4(g1))
-        print(g1.shape)
-        g1 = self.maxpool(g1)
+        
+        # g1 = self.maxpool(g1)
+        
         g1 = g1.squeeze(dim=3)
         
         print(g1.shape)
-        print(len(g1[1]))
-        print(g1[2])
+        
+        
         for i in range(len(g1[1])):
+            
             f_t = torch.sigmoid(torch.matmul(h,self.w_fgateh)+torch.matmul(g1[:,i,:],self.w_fgatex)+self.b_fgate)
+            
             i_t = torch.sigmoid(torch.matmul(h,self.w_iweighth)+torch.matmul(g1[:,i,:],self.g_fgatex)+self.w_ibias)
             tan_t = torch.tanh(torch.matmul(h,self.w_tweighth)+torch.matmul(g1[:,i,:],self.f_fgatex)+self.w_tbias)
             C_t = f_t*C_t+i_t*tan_t
@@ -300,14 +310,19 @@ self.w_ibias,
             
             
             
+        
+        
+            
+            
                 
         
         h =  torch.matmul(h,self.final_layer)+self.finalweights
         
-        #h = F.relu(nn.Linear(h))
+        h = torch.tanh(self.linearlayer(h))
+        h = self.finallayer(h)
         
         h = torch.nn.Softmax(dim=1)(h)
-        
+        print(h[1:5])
         return h
     def lossy(self, x,y):
         
@@ -330,7 +345,7 @@ self.w_ibias,
         bins = np.arange(0,int(self.epochs/100),1)
         for i in range(self.epochs):
             loader = (self.dataset())
-            
+            checkem = (self.dataset())
             inpt = self.forwardpass(loader[0])
             
             
@@ -344,18 +359,18 @@ self.w_ibias,
             j += 1
             if (i+1)% 100 == 0:
                 print("Loss",loss.cpu().item(), "at iteration", j)
-                print("low plasticity" , loader[1][:,0].sum())
+                print("low plasticity" , checkem[1][:,0].sum())
                 print("")
-                print("medium plasticity" , loader[1][:,1].sum())
+                print("medium plasticity" , checkem[1][:,1].sum())
                 print("")
-                print("high plasticity", loader[1][:,2].sum())
+                print("high plasticity", checkem[1][:,2].sum())
                 print("")
                 print(inpt[0].detach().cpu().numpy())
-                print( "Current Accuracy" , self.accuracycheck(loader[0], loader[1])[0])
+                print( "Current Accuracy" , self.accuracycheck(checkem[0], checkem[1])[0])
                 print("Confusion Matrix")
                 track[int((i+1)/100-1)]= (loss.detach().cpu().numpy())/24
-                print(self.accuracycheck(loader[0], loader[1])[2])
-                graph[int((i+1)/100-1)] = self.accuracycheck(loader[0], loader[1])[0]
+                print(self.accuracycheck(checkem[0], checkem[1])[2])
+                graph[int((i+1)/100-1)] = self.accuracycheck(checkem[0], checkem[1])[0]
             
         return graph, bins, track
 
@@ -399,4 +414,4 @@ fig, ax = plt.subplots()
 jones = ax.plot(bins, graph, '-r', color ='green', label = 'training accuracy')
 mike = ax.plot(bins, track, '-r', color = 'blue', label = 'loss function')
 plt.title('Accuracy vs Training')
-plt.show()
+plt.savefig('C:\\Users\\as036\\OneDrive\\Documents\\cancer_figures' + 'myCNNLSTM graph.png')
