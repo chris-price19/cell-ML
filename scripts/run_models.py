@@ -14,7 +14,7 @@ import scipy
 import matplotlib.pyplot as plt
 
 import torch
-from torch.utils.data import Sampler, Dataset, DataLoader, ConcatDataset
+from torch.utils.data import Sampler, Dataset, DataLoader, ConcatDataset, WeightedRandomSampler, RandomSampler
 from torchvision import transforms, utils
 import timeit
 
@@ -58,6 +58,17 @@ np.random.seed(11820)
 with ZipFile(datadir +'images' + fs + 'data-images' + fs + 'cell_series.zip', 'r') as zipObj:
     filenames = zipObj.namelist()
 
+# test = [filenames[2], filenames[37000], filenames[40000]]
+# pattern = ['_L', '_M','_H']
+# print([p for p in pattern if p in [tt for tt in test]])
+
+# print(test)
+# print(''.join(filenames).count('_L'))
+# print(''.join(filenames).count('_M'))
+# print(''.join(filenames).count('_H'))
+
+# sys.exit()
+
 filenames = sorted(filenames, key=lambda x: ( int(x.split('_')[0].split('c')[-1]), int(x.split('_')[1].split('t')[-1]) ) )
 u, c = np.unique([int(ss.split('_')[0].split('c')[-1]) for ss in filenames], return_counts = True)
 id_map = np.concatenate((u[:,None],c[:,None]), axis=1)
@@ -90,17 +101,27 @@ zipTest.close()
 #################################
 
 bsize = 256 * 2
+pattern = ['_L','_M','_H']
 
 train_set = single_cell_dataset(datadir +'images' + fs + 'data-images' + fs + 'train_series.zip')
+wghts = train_set.get_class_weights(pattern)
+# print(wghts[0:10])
+# print(wghts[20000])
+# sys.exit()
+train_sampler = WeightedRandomSampler(torch.from_numpy(wghts), len(wghts))
 
 test_set = single_cell_dataset(datadir +'images' + fs + 'data-images' + fs + 'test_series.zip')
+wghts = test_set.get_class_weights(pattern)
+
+test_sampler = WeightedRandomSampler(torch.from_numpy(wghts), len(wghts))
+
 if torch.cuda.is_available() == True:
     pinning = True
 else:
     pinning = False
 
-train_randloader = DataLoader(train_set, batch_size=bsize, shuffle=True, pin_memory = pinning, num_workers=4)
-test_randloader = DataLoader(test_set, batch_size=bsize, shuffle=True, pin_memory = pinning, num_workers=4)
+train_randloader = DataLoader(train_set, batch_size=bsize, sampler = train_sampler, pin_memory = pinning) #, num_workers= 4) #  shuffle=True,
+test_randloader = DataLoader(test_set, batch_size=bsize,  sampler = test_sampler, pin_memory = pinning) #, num_workers=4) # shuffle=True,
 
 # print([i[1].detach().numpy() for i in test_randloader])
 
@@ -109,40 +130,58 @@ test_randloader = DataLoader(test_set, batch_size=bsize, shuffle=True, pin_memor
 
 ########### test basic CNN
 
-cnetmodel = ConvNet(train_randloader, test_randloader)
-lossL = cnetmodel.train(epochs = 50, bsize = bsize)
+# cnetmodel = ConvNet(train_randloader, test_randloader)
+# lossL = cnetmodel.train(epochs = 1, bsize = bsize)
 
-trainloss, vsize, train_frac, c_matrix = cnetmodel.test(cnetmodel.train_data)
-testloss, vsize, test_frac, c_matrix = cnetmodel.test(cnetmodel.valid_data)
+# trainloss, vsize, train_frac, c_matrix = cnetmodel.test(cnetmodel.train_data)
+# testloss, vsize, test_frac, c_matrix = cnetmodel.test(cnetmodel.valid_data)
 
-print('training acc = %f' % train_frac)
-print('testing acc = %f' % test_frac)
+# print('training acc = %f' % train_frac)
+# print('testing acc = %f' % test_frac)
 
-print('confusion matrix')
-print(c_matrix)
+# print('confusion matrix')
+# print(c_matrix)
 
 
 
 # ### adding time series below
 # #################################
 
-# bsize = 10
+bsize = 10
 
-# train_set = single_cell_dataset(datadir +'images' + fs + 'data-images' + fs + 'train_series.zip')
+train_set = single_cell_dataset(datadir +'images' + fs + 'data-images' + fs + 'train_series.zip')
+test_set = single_cell_dataset(datadir +'images' + fs + 'data-images' + fs + 'test_series.zip')
 
-# test_set = single_cell_dataset(datadir +'images' + fs + 'data-images' + fs + 'test_series.zip')
-# if torch.cuda.is_available() == True:
-#     pinning = True
-# else:
-#     pinning = False
+print(len(train_set))
 
-# train_coherentsampler = time_coherent_sampler(datadir +'images' + fs + 'data-images' + fs + 'train_series.zip')
-# test_coherentsampler = time_coherent_sampler(datadir +'images' + fs + 'data-images' + fs + 'test_series.zip')
+if torch.cuda.is_available() == True:
+    pinning = True
+else:
+    pinning = False
 
-# train_loader = DataLoader(train_set, batch_size=bsize*100, sampler=train_coherentsampler, pin_memory = pinning)
-# test_loader = DataLoader(test_set, batch_size=bsize*100, sampler=test_coherentsampler, pin_memory = pinning)
+train_coherentsampler = time_coherent_sampler(train_set, bsize = bsize)
+test_coherentsampler = time_coherent_sampler(test_set,  bsize = bsize)
 
-# # print([i[1].detach().numpy() for i in test_randloader])
+train_loader = DataLoader(train_set, batch_sampler = train_coherentsampler, pin_memory = pinning)
+test_loader = DataLoader(test_set, batch_sampler = test_coherentsampler, pin_memory = pinning)
+
+print('start')
+# print(len(train_coherentsampler.unique))
+# 
+# for (i1, j2, k3) in train_loader:
+for ii, (images, labels, ids) in enumerate(train_loader):
+    
+    print(ii)
+    # print(len(np.unique(ids[0].numpy())))
+
+
+    # if ii < 4:
+
+    #     print(ids)
+
+    # else:
+
+    #     sys.exit()
 
 # ########### test combined CNN LSTM
 # ### need new model class here.

@@ -25,6 +25,8 @@ from skimage.transform import resize
 from zipfile import ZipFile
 from PIL import Image
 
+from model_components import *
+
 import os
 import sys
 import re
@@ -33,12 +35,7 @@ import re
 class single_cell_dataset(Dataset):
     
     def __init__(self, file_location, transformx = None):
-        """
-        Args:
-            root_dir (string): Directory with all the images.
-            transform (callable, optional): Optional transform to be applied
-                on a sample.
-        """
+
         if torch.cuda.is_available() == True:
             self.dtype_double = torch.cuda.FloatTensor
             self.dtype_int = torch.cuda.LongTensor
@@ -46,8 +43,7 @@ class single_cell_dataset(Dataset):
             self.dtype_double = torch.FloatTensor
             self.dtype_int = torch.LongTensor
 
-        self.zfile = file_location
-        with ZipFile(self.zfile, 'r') as zipObj:
+        with ZipFile(file_location, 'r') as zipObj:
         	self.filenames = zipObj.namelist()
 
         self.filenames = sorted(self.filenames, key=lambda x: ( int(x.split('_')[0].split('c')[-1]), int(x.split('_')[1].split('t')[-1]) ) )
@@ -56,10 +52,9 @@ class single_cell_dataset(Dataset):
         self.id_map = np.concatenate((u[:,None],c[:,None]), axis=1)
 
         # print(self.filenames)
-        self.zipObj = ZipFile(self.zfile, 'r')
+        self.zipObj = ZipFile(file_location, 'r')
 
-        self.transformx = transformx
-        
+        self.transformx = transformx        
         
     def __len__(self):
         return len(self.filenames)
@@ -103,93 +98,69 @@ class single_cell_dataset(Dataset):
         # print(img.shape)
         return torch.from_numpy(img), torch.from_numpy(label), (cell_ind, time_ind)
 
+    def get_class_weights(self, pattern):
+
+        weights = np.zeros(len(self.filenames))
+        # values = np.zeros(len(pattern))
+        for pi, pp in enumerate(pattern):
+            # values[pi] = 1. / ''.join(self.filenames).count(pp)
+            class_weight = 1. / ''.join(self.filenames).count(pp)
+
+            for fi, ff in enumerate(self.filenames):
+                if pp in ff:
+                    weights[fi] = class_weight
+
+        return weights
+
 class time_coherent_sampler(Sampler):
 
-    def __init__(self, data_source, batch_size = 10):
+    def __init__(self, data_source, bsize = 10):
 
         self.data_source = data_source
-        # self.zfile = file_location
-        # with ZipFile(self.zfile, 'r') as zipObj:
-        #     self.filenames = zipObj.namelist()
-
+       
         self.filenames = self.data_source.filenames
-        # self.filenames = sorted(self.filenames, key=lambda x: ( int(x.split('_')[0].split('c')[-1]), int(x.split('_')[1].split('t')[-1]) ) )
-        # u, ind, c = np.unique([int(ss.split('_')[0].split('c')[-1]) for ss in self.filenames], return_index=True, return_counts = True)
-        # self.id_map = np.concatenate((u[:,None], ind[:,None], c[:,None]), axis=1)        
+       
         self.id_map = np.array([int(x.split('_')[0].split('c')[-1]) for x in self.filenames])
-        self.unique = np.unique(self.id_map)
-
-        self.batch_size = batch_size
+        # print(self.id_map)
+        self.unique, counts = np.unique(self.id_map, return_counts = True)
+       
+        self.weights = torch.as_tensor(1. / counts)
+        self.bsize = bsize
 
     def __iter__(self):
 
         n = len(self.unique)
-        cinds = torch.randint(high=n, size=(self.batch_size,))
-        self.allinds = np.where(np.in1d(self.id_map, cinds))[0].tolist()
-        # allinds = tuple(map(tuple, np.where(np.in1d(self.id_map, cinds))[0]))
-        # self.batch_size = len(allinds)
-
-        # print(iter(range(len(self.data_source))))
-        # print(iter(allinds))
         
-        return iter(self.allinds)
+        # unweighted
+        # cinds = torch.randint(high=n, size=(self.bsize,)).numpy()
+        ## ############
+        # print(cinds)
+
+        # weighted
+        ccount = 0
+        cinds2 = torch.multinomial(self.weights, len(self.weights)).numpy() #[0:self.bsize]
+        self.allinds = []
+        for cc in cinds2:
+
+            self.allinds.extend(np.where(np.isin(self.id_map, self.unique[cc]))[0].tolist())
+            ccount += 1
+            
+            if ccount == self.bsize:
+                print(self.allinds)
+                yield self.allinds
+                self.allinds = []
+                ccount = 0
+        
+        if len(self.allinds) > 0:
+            yield self.allinds.tolist()
+        # print(np.sum((np.diff(self.allinds)>1)))
+        
+        # return iter(self.allinds)
 
     def __len__(self):
 
         return len(self.allinds)
 
-
-class convNN(torch.nn.Module):
-
-    def __init__(self):
-        super(convNN, self).__init__()
-
-        # img dim = 72
-
-        self.layer1 = torch.nn.Sequential(
-            torch.nn.Conv2d(1, 16, kernel_size=5, padding=2),
-            torch.nn.BatchNorm2d(16),
-            torch.nn.ReLU(),
-            torch.nn.MaxPool2d(2)
-#             torch.nn.MaxPool2d(kernel_size = 2, stride = 2)
-        )
-        self.layer2 = torch.nn.Sequential(
-            torch.nn.Conv2d(16, 32, kernel_size=3, padding=1, stride=1),
-            torch.nn.BatchNorm2d(32),
-            torch.nn.ReLU(),
-            torch.nn.MaxPool2d(2)
-#             torch.nn.MaxPool2d(kernel_size = 2, stride = 2)
-        )
-        # self.layer3 = torch.nn.Sequential(
-        #     torch.nn.Conv2d(16, 8, kernel_size=7, padding=2),
-        #     torch.nn.BatchNorm2d(8),
-        #     torch.nn.ReLU(),
-        #     torch.nn.MaxPool2d(2)
-        #  )
-
-        # self.drop_out = torch.nn.Dropout(p=0.3)
-    
-        self.fc1 = torch.nn.Linear(32*18*18, 512)
-        torch.nn.init.xavier_normal_(self.fc1.weight)
-        self.fc2 = torch.nn.Linear(512,64)
-        torch.nn.init.xavier_normal_(self.fc2.weight)
-        self.fc3 = torch.nn.Linear(64,3)
-        torch.nn.init.xavier_normal_(self.fc3.weight)
-        
-    def forward_pass(self, x):
-        out = self.layer1(x)
-        # print(out.shape)
-        out = self.layer2(out)
-        # print(out.shape)
-        # out = self.layer3(out)
-        out = out.view(out.size(0), -1) # flattens out for all except first dimension ( equiv to np. reshape) for fully connected layer
-#         print(out.shape)
-        # out = self.drop_out(out)
-        out = self.fc1(out)
-        out = self.fc2(out)
-        out = self.fc3(out)
-
-        return out
     
 class ConvNet:
     # Initialize the class
@@ -223,12 +194,16 @@ class ConvNet:
         
         start_time = timeit.default_timer()
         for epoch in range(epochs):
+
+            # scounts = np.zeros(3)
             
             for it, (images, labels, ids) in enumerate(self.train_data):
                 
                 self.optimizer.zero_grad()
 
-                # print(type(images))
+                # scounts += np.unique(labels.numpy(), return_counts = True)[1]
+
+                #   (type(images))
                 # print(images.shape)
                 # print(images.dtype)
                 # print((images.mean(dim=0)).shape)
