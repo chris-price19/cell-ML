@@ -40,9 +40,10 @@ if 'Chris Price' in cwd:
 elif 'ccarr' in cwd:
     datadir = 'C:\\Users\\ccarr_nj7afa9\\Box Sync\\Plasticity_Protrusions_ML\\'
     fs = '\\'
-elif 'chrispr' in cwd:
-	datadir = '/home/chrispr/mem/chrispr/ml_cell/'
-	fs = '/'
+elif 'chrispr' in cwd:    
+    datadir = '/home/chrispr/mem/chrispr/ml_cell/'
+    fs = '/'
+    # sys.stdout = open('log.txt', 'w')
 else:
     print('add your path to Plasticity_Protrusions_ML here')
     sys.exit()
@@ -53,7 +54,7 @@ else:
 data_fraction = 0.5 # to speed up testing, use some random fraction of images.
 train_fraction = 0.85
 test_fraction = 1 - train_fraction
-np.random.seed(11820)
+# np.random.seed(11820)
 
 with ZipFile(datadir +'images' + fs + 'data-images' + fs + 'cell_series.zip', 'r') as zipObj:
     filenames = zipObj.namelist()
@@ -127,7 +128,7 @@ zipTest.close()
 # test_randloader = DataLoader(test_set, batch_size=bsize,  sampler = test_sampler, pin_memory = pinning) #, num_workers=4) # shuffle=True,
 
 # cnetmodel = ConvNet(train_randloader, test_randloader)
-# lossL = cnetmodel.train(epochs = 1, bsize = bsize)
+# lossL = cnetmodel.train(epochs = 100)
 
 # trainloss, vsize, train_frac, c_matrix = cnetmodel.test(cnetmodel.train_data)
 # testloss, vsize, test_frac, c_matrix = cnetmodel.test(cnetmodel.valid_data)
@@ -152,6 +153,7 @@ print(len(train_set))
 
 if torch.cuda.is_available() == True:
     pinning = True
+
     # self.dtype_double = torch.cuda.FloatTensor
     # self.dtype_int = torch.cuda.LongTensor
     # self.device = torch.device("cuda:0")            
@@ -160,6 +162,7 @@ else:
     # self.dtype_double = torch.FloatTensor
     # self.dtype_int = torch.LongTensor
     # self.device = torch.device("cpu")
+
 
 train_coherentsampler = time_coherent_sampler(train_set, bsize = bsize)
 test_coherentsampler = time_coherent_sampler(test_set,  bsize = bsize)
@@ -177,10 +180,11 @@ test_loader = DataLoader(test_set, batch_sampler = test_coherentsampler, pin_mem
 # ########### test combined CNN LSTM
 # ### need new model class here.
 nlags = 6
+hidden = 128
 
-cnetLSTMmodel = ConvPlusLSTM(train_loader, test_loader, nlags, 20)
+cnetLSTMmodel = ConvPlusLSTM(train_loader, test_loader, nlags, hidden)
 
-lossL = cnetLSTMmodel.train(epochs = 1)
+lossL = cnetLSTMmodel.train(epochs = 250)
 
 trainloss, vsize, train_frac, c_matrix = cnetLSTMmodel.test(cnetLSTMmodel.train_data)
 testloss, vsize, test_frac, c_matrix = cnetLSTMmodel.test(cnetLSTMmodel.valid_data)

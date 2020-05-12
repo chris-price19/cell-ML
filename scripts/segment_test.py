@@ -315,16 +315,16 @@ for ai, aa in enumerate(groups):
 				if subimage.shape[0] != finalsize*4 and subimage.shape[1] != finalsize*4:
 					subimage = resize(subimage, (finalsize*4, finalsize*4), order = 3)
 
-				######## WRITE #############
-				os.chdir('C:\\Users\\Chris Price\\Box Sync\\research\\cell ML\\test')
+				# ######## WRITE #############
+				# os.chdir('C:\\Users\\Chris Price\\Box Sync\\research\\cell ML\\test')
 
-				im = pimage.fromarray(subimage * 255).copy().convert('L')
-				savename = fname.split('.')[0] + '_'+str(int(match_track)) + '.png'
-				im.save(savename)
+				# im = pimage.fromarray(subimage * 255).copy().convert('L')
+				# savename = fname.split('.')[0] + '_'+str(int(match_track)) + '.png'
+				# im.save(savename)
 
-				os.chdir(datadir +'images\\split-images\\')
+				# os.chdir(datadir +'images\\split-images\\')
 
-				########## WRITE ############
+				# ########## WRITE ############
 		
 		exp_iter -= 1
 		

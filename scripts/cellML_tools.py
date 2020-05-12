@@ -44,6 +44,9 @@ class single_cell_dataset(Dataset):
             self.dtype_double = torch.FloatTensor
             self.dtype_int = torch.LongTensor
 
+        # if 'chrispr' in os.getcwd():
+        #     self.filenames = os.listdir()
+        # else:
         with ZipFile(file_location, 'r') as zipObj:
         	self.filenames = zipObj.namelist()
 
@@ -125,7 +128,7 @@ class time_coherent_sampler(Sampler):
         # print(self.id_map)
         self.unique, counts = np.unique(self.id_map, return_counts = True)
        
-        self.weights = torch.as_tensor(1. / counts)
+        self.weights = torch.as_tensor(1. / counts**2)
         self.bsize = bsize
 
     def __iter__(self):
@@ -139,9 +142,9 @@ class time_coherent_sampler(Sampler):
 
         # weighted
         ccount = 0
-        cinds2 = torch.multinomial(self.weights, len(self.weights)).numpy() #[0:self.bsize]
+        cinds = torch.multinomial(self.weights, len(self.weights)).numpy()
         self.allinds = []
-        for cc in cinds2:
+        for cc in cinds:
 
             self.allinds.extend(np.where(np.isin(self.id_map, self.unique[cc]))[0].tolist())
             ccount += 1
@@ -256,7 +259,7 @@ class ConvNet:
         
         for it, (images, labels, ids) in enumerate(valid_data):
 
-            images = ((images - images.mean(dim=0)) / (images.std(dim=0) + 1e-8)).float()
+            images = ((images - images.mean(dim=0)) / (images.std(dim=0) + 1e-8))
 
             images, labels = images.to(self.device), labels.to(self.device)
 
@@ -303,8 +306,8 @@ class ConvPlusLSTM:
 
         self.cnet = convOnly().float().to(self.device) #type(self.dtype_double)
         
-        self.x_dim = 2048
-        self.y_dim = 3
+        self.x_dim = 64
+        self.y_dim = 32
         self.nlags = nlags
 
         self.lstm = LSTM(self.x_dim, self.y_dim, self.nlags, hidden_dim).to(self.device)
@@ -312,8 +315,8 @@ class ConvPlusLSTM:
         self.loss_fn = torch.nn.CrossEntropyLoss(reduction='mean')
     
         self.combo_optimizer = (
-            torch.optim.Adam(list(self.cnet.parameters()) 
-            + [self.lstm.W_f, self.lstm.W_i, self.lstm.W_C, self.lstm.W_o, self.lstm.U_f, self.lstm.U_i, self.lstm.U_C, self.lstm.U_o, self.lstm.b_i, self.lstm.b_f, self.lstm.b_C, self.lstm.b_o, self.lstm.V, self.lstm.bias_out], lr=5e-2)
+            torch.optim.Adam(list(self.cnet.parameters()) + list(self.lstm.parameters())
+            + [self.lstm.W_f, self.lstm.W_i, self.lstm.W_C, self.lstm.W_o, self.lstm.U_f, self.lstm.U_i, self.lstm.U_C, self.lstm.U_o, self.lstm.b_i, self.lstm.b_f, self.lstm.b_C, self.lstm.b_o, self.lstm.V, self.lstm.bias_out], lr=1e-2)
         )
 
     def train(self, epochs): #, bsize = 128):
@@ -442,18 +445,6 @@ class ConvPlusLSTM:
         # print(total)
         
         return loss, total, (correct / total), c_matrix
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 

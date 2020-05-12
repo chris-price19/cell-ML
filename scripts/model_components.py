@@ -69,7 +69,7 @@ class convNN(torch.nn.Module):
 
         # self.drop_out = torch.nn.Dropout(p=0.3)
     
-        self.fc1 = torch.nn.Linear(512*4, 512)
+        self.fc1 = torch.nn.Linear(3872, 512)
         torch.nn.init.xavier_normal_(self.fc1.weight)
         self.fc2 = torch.nn.Linear(512,64)
         torch.nn.init.xavier_normal_(self.fc2.weight)
@@ -108,7 +108,7 @@ class convOnly(torch.nn.Module):
 #             torch.nn.MaxPool2d(kernel_size = 2, stride = 2)
         )
         self.layer2 = torch.nn.Sequential(
-            torch.nn.Conv2d(16, 16, kernel_size=5, padding=1, stride=2),
+            torch.nn.Conv2d(16, 16, kernel_size=3, padding=1, stride=2),
             torch.nn.BatchNorm2d(16),
             torch.nn.ReLU(),
             # torch.nn.MaxPool2d(2)
@@ -116,7 +116,7 @@ class convOnly(torch.nn.Module):
         )
 
         self.layer3 = torch.nn.Sequential(
-            torch.nn.Conv2d(16, 32, kernel_size=3, padding=1, stride=1),
+            torch.nn.Conv2d(16, 32, kernel_size=5, padding=1, stride=1),
             torch.nn.BatchNorm2d(32),
             torch.nn.ReLU(),
             torch.nn.MaxPool2d(2)
@@ -131,10 +131,10 @@ class convOnly(torch.nn.Module):
 #             torch.nn.MaxPool2d(kernel_size = 2, stride = 2)
         )
     
-        # self.fc1 = torch.nn.Linear(512*4, 512)
-        # torch.nn.init.xavier_normal_(self.fc1.weight)
-        # self.fc2 = torch.nn.Linear(512,64)
-        # torch.nn.init.xavier_normal_(self.fc2.weight)
+        self.fc1 = torch.nn.Linear(2048, 512)
+        torch.nn.init.xavier_normal_(self.fc1.weight)
+        self.fc2 = torch.nn.Linear(512,64)
+        torch.nn.init.xavier_normal_(self.fc2.weight)
         # self.fc3 = torch.nn.Linear(64,3)
         # torch.nn.init.xavier_normal_(self.fc3.weight)
         
@@ -151,9 +151,8 @@ class convOnly(torch.nn.Module):
         out = out.view(out.size(0), -1) # flattens out for all except first dimension ( equiv to np. reshape) for fully connected layer
         # print(out.shape)
 #         # out = self.drop_out(out)
-#         out = self.fc1(out)
-#         out = self.fc2(out)
-#         out = self.fc3(out)
+        out = self.fc1(out)
+        out = self.fc2(out)
 
         return out
 
@@ -182,6 +181,8 @@ class LSTM(torch.nn.Module):
         # Store loss values
         self.training_loss = []
       
+        self.fc1 = torch.nn.Linear(self.Y_dim, self.Y_dim)
+        self.fc2 = torch.nn.Linear(self.Y_dim, 3)
         # Define optimizer
         # self.optimizer = torch.optim.Adam([self.W_f, self.W_i, self.W_C, self.W_o, self.U_f, self.U_i, self.U_C, self.U_o, self.b_i, self.b_f, self.b_C, self.b_o, self.V, self.bias_out], lr=1e-3)    
     
@@ -245,4 +246,7 @@ class LSTM(torch.nn.Module):
 
         H = torch.matmul(H, self.V ) + self.bias_out
 
-        return H
+        # out = self.fc1(H)
+        out = self.fc2(H)
+
+        return out

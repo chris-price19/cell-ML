@@ -101,7 +101,7 @@ px_over_um = 1.374 * 4 # recalibrate in the loops
 
 # # print(files)
 
-zipOut = ZipFile(datadir +'images\\single-images\\indiv-cells.zip', 'w')
+# zipOut = ZipFile(datadir +'images\\single-images\\indiv-cells.zip', 'w')
 
 for ai, aa in enumerate(groups):
 	
@@ -145,11 +145,11 @@ for ai, aa in enumerate(groups):
 		subid_pool = idpool.loc[idpool['time'] == exp_times[exp_iter-1]]
 		# print(subid_pool.loc[subid_pool['trackID'] == 104])
 
-		# fig, ax = plt.subplots(figsize=(10, 6))
+		fig, ax = plt.subplots(figsize=(10, 6))
 
 		image, label_image, thresh = identify_cells(image, 1., 7, 'bimodal')
 		image_label_overlay = label2rgb(label_image, image=image, bg_label=0)
-		# ax.imshow(image_label_overlay)
+		ax.imshow(image_label_overlay)
 		# plt.show()
 
 		# determine an offset to better match tracks.
@@ -198,7 +198,7 @@ for ai, aa in enumerate(groups):
 			# print(ri)
 			# print(np.mean(subimage))
 
-			if region.area >= 100*4*4 and np.amax([(maxr-minr),(maxc-minc)]) <= 40*4:
+			if region.area >= 100*4*4: # and np.amax([(maxr-minr),(maxc-minc)]) <= 40*4:
 
 				keep_region[ri,0] = ri+1
 				keep_region[ri,1:5] = region.bbox
@@ -304,14 +304,14 @@ for ai, aa in enumerate(groups):
 				# ax2.imshow(subimage, cmap='gray', vmin=0, vmax=1)
 				# plt.draw()
 				# plt.pause(4)
-				# if match_track == 88:
-				# 	eecolor = 'green'
-				# else:
-				# 	eecolor = 'red'
+				if match_track == 98:
+					eecolor = 'green'
+				else:
+					eecolor = 'red'
 
-				# rect = mpatches.Rectangle((minc, minr), maxc - minc, maxr - minr,
-		  #                                 fill=False, edgecolor=eecolor, linewidth=1)
-				# ax.add_patch(rect)
+				rect = mpatches.Rectangle((minc, minr), maxc - minc, maxr - minr,
+		                                  fill=False, edgecolor=eecolor, linewidth=1)
+				ax.add_patch(rect)
 				######
 
 				# print(subimage.shape)
@@ -324,26 +324,28 @@ for ai, aa in enumerate(groups):
 
 				if subimage.shape[0] != subimage.shape[1]:
 					print(subimage.shape)
-					print('shape is fucked')
+					print('shape is bad!')
 					sys.exit()
 
-				######## WRITE #############
-				print('writing image %f x %f' % (subimage.shape[0], subimage.shape[1]))
 
-				os.chdir(datadir +'images\\single-images\\')
+				# ######## WRITE #############
+				# print('writing image %f x %f' % (subimage.shape[0], subimage.shape[1]))
 
-				im = pimage.fromarray(subimage * 255).copy().convert('L')
-				savename = fname.split('.')[0] + '_'+str(int(match_track)) + '.png'
-				imfile = BytesIO()
-				im.save(imfile, 'png')
-				zipOut.writestr(savename, imfile.getvalue())
+				# os.chdir(datadir +'images\\single-images\\')
 
-				# im.save(savename)
+				# im = pimage.fromarray(subimage * 255).copy().convert('L')
+				# savename = fname.split('.')[0] + '_'+str(int(match_track)) + '.png'
+				# imfile = BytesIO()
+				# im.save(imfile, 'png')
+				# zipOut.writestr(savename, imfile.getvalue())
 
-				os.chdir(datadir +'images\\split-images\\')
-				# sys.exit()
-				########## WRITE ############
-		
+				# # im.save(savename)
+
+				# os.chdir(datadir +'images\\split-images\\')
+				# # sys.exit()
+				# ########## WRITE ############
+		plt.tight_layout()
+		plt.show()
 		exp_iter -= 1
 		
 zipOut.close()
