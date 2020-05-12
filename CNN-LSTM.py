@@ -16,7 +16,11 @@ from sklearn.preprocessing import OneHotEncoder
 from numpy import array
 from numpy.random import choice
 import matplotlib.pyplot as plt
-data = pd.read_csv("C:\\Users\\as036\\.spyder-py3\\cellvector2.csv")
+
+
+# data = pd.read_csv("C:\\Users\\as036\\.spyder-py3\\cellvector2.csv")
+
+data = pd.read_csv("C:\\Users\\Chris Price\\Box Sync\\Plasticity_Protrusions_ML\\images\\track-data\\cellDF_cleaned_exp_v2.csv")
 
 
 
@@ -95,6 +99,7 @@ class myRNN(nn.Module):
             
         else:
             self.dtype = torch.FloatTensor
+            self.device = 'cpu'
             
             
         self.x = x
@@ -166,7 +171,9 @@ self.g_fgatex,
 self.f_fgatex,
 self.w_ibias,
 ],lr = 2.5e-3 )
+
         self.loss = nn.CrossEntropyLoss().cuda()
+        
     def one_hotenc(self):
         data = ['DMSO','GM6001','CK-666','B1','IgG','NSC23766','Y27632','dH20','Drug Z','Bleb','Lata','Mar']
         values = array(data)
@@ -185,7 +192,7 @@ self.w_ibias,
         weights = np.random.normal(0,np.sqrt(2/(input_layer+output_layer)),input_layer)
         weights = np.repeat(weights, output_layer)
         weights = torch.tensor(weights, requires_grad=True).to(self.device)
-        weights = weights.type(torch.cuda.FloatTensor).resize(input_layer,output_layer)
+        weights = weights.type(torch.FloatTensor).resize(input_layer,output_layer)
         return(weights) 
     def dataset(self):
         g = np.arange(0,12,1)
@@ -239,16 +246,16 @@ self.w_ibias,
             #this line must match whatever data you are training against. 
             setup5 = pd.DataFrame(setup5, columns = ['stepsize','spheric','ellipticO','ellipticP','area','volume'])
             setup5 = torch.from_numpy(setup5.to_numpy())
-            setup5 = setup5.type(torch.cuda.FloatTensor)
+            setup5 = setup5.type(torch.FloatTensor)
             
             check_plas = torch.from_numpy(check_plas.to_numpy())
             
             
             check_env = torch.from_numpy(check_env.to_numpy())
 
-            check_plas = check_plas.type(torch.cuda.FloatTensor)
+            check_plas = check_plas.type(torch.FloatTensor)
             
-            check_env = check_env.type(torch.cuda.FloatTensor)
+            check_env = check_env.type(torch.FloatTensor)
             minibatch[j,:,:,:] = setup5.unsqueeze(dim=0)
             checkplas[:,j,:] = check_plas
             
@@ -286,10 +293,7 @@ self.w_ibias,
         
         g1 = self.maxpool(g1)
         
-        g1 = g1.squeeze(dim=3)
-        
-                
-        
+        g1 = g1.squeeze(dim=3)        
         
         for i in range(len(g1[1])):
             

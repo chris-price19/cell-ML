@@ -15,6 +15,7 @@ import matplotlib.pyplot as plt
 
 import torch
 from torch.utils.data import Sampler, Dataset, DataLoader, ConcatDataset
+from torch.autograd import Variable
 from torchvision import transforms, utils
 import timeit
 
@@ -25,6 +26,8 @@ from skimage.transform import resize
 from zipfile import ZipFile
 from PIL import Image
 
+from model_components import *
+
 import os
 import sys
 import re
@@ -33,12 +36,7 @@ import re
 class single_cell_dataset(Dataset):
     
     def __init__(self, file_location, transformx = None):
-        """
-        Args:
-            root_dir (string): Directory with all the images.
-            transform (callable, optional): Optional transform to be applied
-                on a sample.
-        """
+
         if torch.cuda.is_available() == True:
             self.dtype_double = torch.cuda.FloatTensor
             self.dtype_int = torch.cuda.LongTensor
@@ -46,8 +44,10 @@ class single_cell_dataset(Dataset):
             self.dtype_double = torch.FloatTensor
             self.dtype_int = torch.LongTensor
 
-        self.zfile = file_location
-        with ZipFile(self.zfile, 'r') as zipObj:
+        # if 'chrispr' in os.getcwd():
+        #     self.filenames = os.listdir()
+        # else:
+        with ZipFile(file_location, 'r') as zipObj:
         	self.filenames = zipObj.namelist()
 
         self.filenames = sorted(self.filenames, key=lambda x: ( int(x.split('_')[0].split('c')[-1]), int(x.split('_')[1].split('t')[-1]) ) )
@@ -56,10 +56,9 @@ class single_cell_dataset(Dataset):
         self.id_map = np.concatenate((u[:,None],c[:,None]), axis=1)
 
         # print(self.filenames)
-        self.zipObj = ZipFile(self.zfile, 'r')
+        self.zipObj = ZipFile(file_location, 'r')
 
-        self.transformx = transformx
-        
+        self.transformx = transformx        
         
     def __len__(self):
         return len(self.filenames)
@@ -103,93 +102,70 @@ class single_cell_dataset(Dataset):
         # print(img.shape)
         return torch.from_numpy(img), torch.from_numpy(label), (cell_ind, time_ind)
 
+    def get_class_weights(self, pattern):
+
+        weights = np.zeros(len(self.filenames))
+        # values = np.zeros(len(pattern))
+        for pi, pp in enumerate(pattern):
+            # values[pi] = 1. / ''.join(self.filenames).count(pp)
+            class_weight = 1. / ''.join(self.filenames).count(pp)
+
+            for fi, ff in enumerate(self.filenames):
+                if pp in ff:
+                    weights[fi] = class_weight
+
+        return weights
+
 class time_coherent_sampler(Sampler):
 
-    def __init__(self, data_source, batch_size = 10):
+    def __init__(self, data_source, bsize = 10):
 
         self.data_source = data_source
-        # self.zfile = file_location
-        # with ZipFile(self.zfile, 'r') as zipObj:
-        #     self.filenames = zipObj.namelist()
-
+       
         self.filenames = self.data_source.filenames
-        # self.filenames = sorted(self.filenames, key=lambda x: ( int(x.split('_')[0].split('c')[-1]), int(x.split('_')[1].split('t')[-1]) ) )
-        # u, ind, c = np.unique([int(ss.split('_')[0].split('c')[-1]) for ss in self.filenames], return_index=True, return_counts = True)
-        # self.id_map = np.concatenate((u[:,None], ind[:,None], c[:,None]), axis=1)        
+       
         self.id_map = np.array([int(x.split('_')[0].split('c')[-1]) for x in self.filenames])
-        self.unique = np.unique(self.id_map)
-
-        self.batch_size = batch_size
+        # print(self.id_map)
+        self.unique, counts = np.unique(self.id_map, return_counts = True)
+       
+        self.weights = torch.as_tensor(1. / counts**2)
+        self.bsize = bsize
 
     def __iter__(self):
 
         n = len(self.unique)
-        cinds = torch.randint(high=n, size=(self.batch_size,))
-        self.allinds = np.where(np.in1d(self.id_map, cinds))[0].tolist()
-        # allinds = tuple(map(tuple, np.where(np.in1d(self.id_map, cinds))[0]))
-        # self.batch_size = len(allinds)
-
-        # print(iter(range(len(self.data_source))))
-        # print(iter(allinds))
         
-        return iter(self.allinds)
+        # unweighted
+        # cinds = torch.randint(high=n, size=(n,)).numpy()
+        ## ############
+        # print(cinds)
+
+        # weighted
+        ccount = 0
+        cinds = torch.multinomial(self.weights, len(self.weights)).numpy()
+        self.allinds = []
+        for cc in cinds:
+
+            self.allinds.extend(np.where(np.isin(self.id_map, self.unique[cc]))[0].tolist())
+            ccount += 1
+            
+            if ccount == self.bsize:
+                # print(self.allinds)
+                yield self.allinds
+                self.allinds = []
+                ccount = 0
+        
+        if len(self.allinds) > 0:
+            yield self.allinds
+
+        # print(np.sum((np.diff(self.allinds)>1)))
+        
+        # return iter(self.allinds)
 
     def __len__(self):
 
         return len(self.allinds)
 
-
-class convNN(torch.nn.Module):
-
-    def __init__(self):
-        super(convNN, self).__init__()
-
-        # img dim = 72
-
-        self.layer1 = torch.nn.Sequential(
-            torch.nn.Conv2d(1, 16, kernel_size=5, padding=2),
-            torch.nn.BatchNorm2d(16),
-            torch.nn.ReLU(),
-            torch.nn.MaxPool2d(2)
-#             torch.nn.MaxPool2d(kernel_size = 2, stride = 2)
-        )
-        self.layer2 = torch.nn.Sequential(
-            torch.nn.Conv2d(16, 32, kernel_size=3, padding=1, stride=1),
-            torch.nn.BatchNorm2d(32),
-            torch.nn.ReLU(),
-            torch.nn.MaxPool2d(2)
-#             torch.nn.MaxPool2d(kernel_size = 2, stride = 2)
-        )
-        # self.layer3 = torch.nn.Sequential(
-        #     torch.nn.Conv2d(16, 8, kernel_size=7, padding=2),
-        #     torch.nn.BatchNorm2d(8),
-        #     torch.nn.ReLU(),
-        #     torch.nn.MaxPool2d(2)
-        #  )
-
-        # self.drop_out = torch.nn.Dropout(p=0.3)
-    
-        self.fc1 = torch.nn.Linear(32*18*18, 512)
-        torch.nn.init.xavier_normal_(self.fc1.weight)
-        self.fc2 = torch.nn.Linear(512,64)
-        torch.nn.init.xavier_normal_(self.fc2.weight)
-        self.fc3 = torch.nn.Linear(64,3)
-        torch.nn.init.xavier_normal_(self.fc3.weight)
-        
-    def forward_pass(self, x):
-        out = self.layer1(x)
-        # print(out.shape)
-        out = self.layer2(out)
-        # print(out.shape)
-        # out = self.layer3(out)
-        out = out.view(out.size(0), -1) # flattens out for all except first dimension ( equiv to np. reshape) for fully connected layer
-#         print(out.shape)
-        # out = self.drop_out(out)
-        out = self.fc1(out)
-        out = self.fc2(out)
-        out = self.fc3(out)
-
-        return out
     
 class ConvNet:
     # Initialize the class
@@ -213,9 +189,9 @@ class ConvNet:
 
         self.loss_fn = torch.nn.CrossEntropyLoss(reduction='mean')
     
-        self.optimizer = torch.optim.Adam(self.net.parameters(), lr=1e-1)
+        self.optimizer = torch.optim.Adam(self.net.parameters(), lr=5e-2)
 
-    def train(self, epochs, bsize = 128):
+    def train(self, epochs): #, bsize = 128):
         
 #         bsize = int(np.ceil(len(traindata) * batch_pct))
         # self.train_loader = DataLoader(self.train_data, batch_size=bsize, shuffle=True)
@@ -223,12 +199,16 @@ class ConvNet:
         
         start_time = timeit.default_timer()
         for epoch in range(epochs):
+
+            # scounts = np.zeros(3)
             
             for it, (images, labels, ids) in enumerate(self.train_data):
                 
                 self.optimizer.zero_grad()
 
-                # print(type(images))
+                # scounts += np.unique(labels.numpy(), return_counts = True)[1]
+
+                #   (type(images))
                 # print(images.shape)
                 # print(images.dtype)
                 # print((images.mean(dim=0)).shape)
@@ -264,16 +244,22 @@ class ConvNet:
         total = 0.
         loss = 0.
         
-        total = len(np.vstack([i[1].detach().numpy() for i in valid_data]))
-        print(total)
-        u, c = np.unique(total)
+        total = np.vstack([i[1].detach().numpy() for i in valid_data])
+        u, c = np.unique(total, return_counts=True)
+        print(u)
+        print(c)
+        total = len(total)
         class_dim = len(u)
+        print(class_dim)
         # class_dim = len(np.unique([i[1].item() for i in valid_data]))
         print('class balance')
         print(c / np.sum(c))
+
         c_matrix = np.zeros((class_dim, class_dim))
         
         for it, (images, labels, ids) in enumerate(valid_data):
+
+            images = ((images - images.mean(dim=0)) / (images.std(dim=0) + 1e-8))
 
             images, labels = images.to(self.device), labels.to(self.device)
 
@@ -296,6 +282,171 @@ class ConvNet:
         # print(total)
         
         return loss, total, (correct / total), c_matrix
+
+
+
+class ConvPlusLSTM:
+    # Initialize the class
+    def __init__(self, train_data, valid_data, nlags, hidden_dim):
+
+        if torch.cuda.is_available() == True:
+            self.dtype_double = torch.cuda.FloatTensor
+            self.dtype_int = torch.cuda.LongTensor
+            self.device = torch.device("cuda:0") 
+            # cudnn.benchmark = True
+        else:
+            self.dtype_double = torch.FloatTensor
+            self.dtype_int = torch.LongTensor
+            self.device = torch.device("cpu")
+        
+        # print(self.dtype_double)
+        self.train_data = train_data
+        # pass in data loader
+        self.valid_data = valid_data
+
+        self.cnet = convOnly().float().to(self.device) #type(self.dtype_double)
+        
+        self.x_dim = 64
+        self.y_dim = 32
+        self.nlags = nlags
+
+        self.lstm = LSTM(self.x_dim, self.y_dim, self.nlags, hidden_dim).to(self.device)
+
+        self.loss_fn = torch.nn.CrossEntropyLoss(reduction='mean')
+    
+        self.combo_optimizer = (
+            torch.optim.Adam(list(self.cnet.parameters()) + list(self.lstm.parameters())
+            + [self.lstm.W_f, self.lstm.W_i, self.lstm.W_C, self.lstm.W_o, self.lstm.U_f, self.lstm.U_i, self.lstm.U_C, self.lstm.U_o, self.lstm.b_i, self.lstm.b_f, self.lstm.b_C, self.lstm.b_o, self.lstm.V, self.lstm.bias_out], lr=1e-2)
+        )
+
+    def train(self, epochs): #, bsize = 128):
+        
+#         bsize = int(np.ceil(len(traindata) * batch_pct))
+        # self.train_loader = DataLoader(self.train_data, batch_size=bsize, shuffle=True)
+        losslist = []
+        
+        start_time = timeit.default_timer()
+        for epoch in range(epochs):
+     
+            for it, (images, labels, ids) in enumerate(self.train_data):
+                
+                unq, cnt = np.unique(ids[0], return_counts=True)
+                batch_lags = np.sum(cnt - self.nlags+1)
+                # print(batch_lags)
+
+                self.combo_optimizer.zero_grad()
+
+                # pixel-wise standardization in each batch
+                images = ((images - images.mean(dim=0)) / (images.std(dim=0) + 1e-8)).float()
+
+                images, labels = images.to(self.device), labels.to(self.device)
+
+                # print(images.dtype)
+                                
+                outputs = self.cnet.forward_pass(images)
+
+                restack = []
+                laglabels = []
+                
+                li = 0
+                for ui, uu in enumerate(unq):
+                    ci = 0
+                    while ci < cnt[ui] - self.nlags + 1:
+                        restack.append(outputs[li:li+self.nlags,:])
+                        laglabels.append(labels[li])
+                        ci += 1
+                        li += 1
+                    li += self.nlags-1
+                # print(restack)
+                laglabels = torch.stack(laglabels)
+                inputs = torch.stack(restack, dim = 1)
+                # print(inputs.shape)
+                LSTMoutputs = self.lstm.forward_pass(inputs)
+                # print(LSTMoutputs.shape)
+
+                loss = self.loss_fn(LSTMoutputs, laglabels.squeeze().long())
+                losslist.append(loss)
+
+                loss.backward()
+                
+                self.combo_optimizer.step()
+
+                if it % 20 == 0:
+                    print(losslist[-1])
+            
+            elapsed = timeit.default_timer() - start_time
+            start_time = timeit.default_timer()
+            print('Epoch %d: %f s' % (epoch, elapsed))
+
+        return losslist
+
+    def test(self, valid_data):
+
+        correct = 0.
+        total = 0.
+        loss = 0.
+        
+        total = np.vstack([i[1].detach().numpy() for i in valid_data])
+        u, c = np.unique(total, return_counts=True)
+        print(u)
+        print(c)
+        total = len(total)
+        class_dim = len(u)
+        print(class_dim)
+        # class_dim = len(np.unique([i[1].item() for i in valid_data]))
+        print('class balance')
+        print(c / np.sum(c))
+
+        c_matrix = np.zeros((class_dim, class_dim))
+        
+        for it, (images, labels, ids) in enumerate(valid_data):
+            
+            unq, cnt = np.unique(ids[0], return_counts=True)
+            batch_lags = np.sum(cnt - self.nlags+1)
+            # pixel-wise standardization in each batch
+            images = ((images - images.mean(dim=0)) / (images.std(dim=0) + 1e-8)).float()
+
+            images, labels = images.to(self.device), labels.to(self.device)
+                            
+            outputs = self.cnet.forward_pass(images)
+
+            restack = []
+            laglabels = []
+            
+            li = 0
+            for ui, uu in enumerate(unq):
+                ci = 0
+                while ci < cnt[ui] - self.nlags + 1:
+                    restack.append(outputs[li:li+self.nlags,:])
+                    laglabels.append(labels[li])
+                    ci += 1
+                    li += 1
+                li += self.nlags-1
+            # print(restack)
+            laglabels = torch.stack(laglabels)
+            inputs = torch.stack(restack, dim = 1)
+
+            LSTMoutputs = self.lstm.forward_pass(inputs)
+
+            loss = self.loss_fn(LSTMoutputs, laglabels.squeeze().long())
+#             print(loss)
+            _, predicted = torch.max(LSTMoutputs, dim=1) # .detach().numpy()
+
+            labels = laglabels.cpu().detach().numpy()
+            predicted = predicted.unsqueeze(1).cpu().detach().numpy()
+            correct += (predicted == labels).sum()
+            # print(type(correct))
+            
+            for ai in np.arange(class_dim):
+                for pi in np.arange(class_dim):
+                    c_matrix[pi,ai] += np.sum([(predicted == ai) & (labels == pi)])
+
+        # print(correct)
+        # print(total)
+        
+        return loss, total, (correct / total), c_matrix
+
+
 
 
 
@@ -352,4 +503,4 @@ if __name__ == "__main__":
 ########### test basic CNN
 
     cnetmodel = ConvNet(train_randloader, test_randloader) #, testdata)
-    lossL = cnetmodel.train(epochs = 5, bsize = bsize)
+    lossL = cnetmodel.train(epochs = 5)
