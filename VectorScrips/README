@@ -1,0 +1,7 @@
+The following scripts will all run off the vectorized data, all are built to run immediatly and will have confusion
+matrices as well as graphs at the end of running. 
+
+The only things that must be adjusted is that the data location must be changed in the file directory, which is the first line
+of the code and the graph save location must be changed in the last line. 
+
+All code must be run off the vectorized CV2 data provided.
