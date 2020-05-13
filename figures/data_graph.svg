@@ -334,17 +334,17 @@
      borderopacity="1.0"
      inkscape:pageopacity="0.0"
      inkscape:pageshadow="2"
-     inkscape:zoom="0.175"
-     inkscape:cx="-2641.3953"
-     inkscape:cy="173.36198"
+     inkscape:zoom="0.98994949"
+     inkscape:cx="140.84498"
+     inkscape:cy="703.34075"
      inkscape:document-units="mm"
      inkscape:current-layer="layer1"
      showgrid="false"
      units="in"
      inkscape:window-width="1920"
      inkscape:window-height="1017"
-     inkscape:window-x="-8"
-     inkscape:window-y="-2"
+     inkscape:window-x="1912"
+     inkscape:window-y="-8"
      inkscape:window-maximized="1"
      inkscape:snap-global="false">
     <inkscape:grid
@@ -567,16 +567,16 @@
        style="opacity:1;fill:none;fill-opacity:1;stroke:#008000;stroke-width:0.72700006;stroke-linecap:square;stroke-linejoin:miter;stroke-miterlimit:4;stroke-dasharray:none;stroke-dashoffset:0;stroke-opacity:1"
        id="rect815-8-3-97-7"
        width="42.914715"
-       height="15.768905"
+       height="12.294401"
        x="81.009705"
-       y="99.621414"
+       y="101.50842"
        inkscape:export-xdpi="600"
        inkscape:export-ydpi="600" />
     <flowRoot
        xml:space="preserve"
        id="flowRoot817-7-4-4-0"
        style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:16px;line-height:1.25;font-family:'Cambria Math';-inkscape-font-specification:'Cambria Math, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-feature-settings:normal;text-align:center;letter-spacing:0px;word-spacing:0px;writing-mode:lr-tb;text-anchor:middle;fill:#000000;fill-opacity:1;stroke:none"
-       transform="matrix(0.26458333,0,0,0.26458333,206.70466,111.4553)"
+       transform="matrix(0.26458333,0,0,0.26458333,206.43739,114.128)"
        inkscape:export-xdpi="600"
        inkscape:export-ydpi="600"><flowRegion
          id="flowRegion819-3-7-02-9"
@@ -588,7 +588,11 @@
            y="-37.135437"
            style="text-align:center;text-anchor:middle" /></flowRegion><flowPara
          id="flowPara823-0-28-5-6"
-         style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:18.66666603px;font-family:'Cambria Math';-inkscape-font-specification:'Cambria Math, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-feature-settings:normal;text-align:center;writing-mode:lr-tb;text-anchor:middle"> Convolutional  Net (CNN)</flowPara></flowRoot>    <rect
+         style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:18.66666603px;font-family:'Cambria Math';-inkscape-font-specification:'Cambria Math, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-feature-settings:normal;text-align:center;writing-mode:lr-tb;text-anchor:middle"><flowSpan
+   style="fill:#0000ff"
+   id="flowSpan17483">LSTM</flowSpan> or <flowSpan
+   style="fill:#ff0000"
+   id="flowSpan17485">CNN</flowSpan></flowPara></flowRoot>    <rect
        style="opacity:1;fill:none;fill-opacity:1;stroke:#008000;stroke-width:0.72700006;stroke-linecap:square;stroke-linejoin:miter;stroke-miterlimit:4;stroke-dasharray:none;stroke-dashoffset:0;stroke-opacity:1"
        id="rect815-8-3-97-7-6"
        width="42.914715"
@@ -695,7 +699,7 @@
        inkscape:export-ydpi="600" />
     <path
        style="fill:none;stroke:#0000ff;stroke-width:0.565;stroke-linecap:butt;stroke-linejoin:miter;stroke-miterlimit:4;stroke-dasharray:none;stroke-opacity:1;marker-end:url(#marker14194)"
-       d="m 89.18782,78.001791 v 9.822159 l -50.629732,-0.03914 -0.01621,12.806005"
+       d="m 83.896153,78.001791 v 9.822159 l -45.338065,-0.03914 -0.01621,12.80601"
        id="path887-7-6"
        inkscape:connector-curvature="0"
        sodipodi:nodetypes="cccc"
@@ -703,7 +707,7 @@
        inkscape:export-ydpi="600" />
     <path
        style="fill:none;stroke:#0000ff;stroke-width:0.565;stroke-linecap:butt;stroke-linejoin:miter;stroke-miterlimit:4;stroke-dasharray:none;stroke-opacity:1;marker-end:url(#Arrow2Mend)"
-       d="m 98.938974,78.4874 -0.0232,18.971968"
+       d="m 97.88064,78.395017 -0.0232,21.194849"
        id="path1419-3-9-5-3"
        inkscape:connector-curvature="0"
        inkscape:export-xdpi="600"
@@ -726,7 +730,7 @@
        inkscape:export-ydpi="600" />
     <path
        style="fill:none;stroke:#ff0000;stroke-width:0.56500006;stroke-linecap:butt;stroke-linejoin:miter;stroke-miterlimit:4;stroke-dasharray:none;stroke-opacity:1;marker-end:url(#marker14539)"
-       d="m 106.11768,78.472397 -0.0232,19.043667"
+       d="m 105.05934,78.391874 -0.0232,20.988396"
        id="path1419-3-9-5-3-2"
        inkscape:connector-curvature="0"
        inkscape:export-xdpi="600"
@@ -16794,5 +16798,34 @@ nva0p33G/i9yu1oLFK/lRgAAAABJRU5ErkJggg==
            y="429.70541"
            style="stroke-width:0.56579792" /></flowRegion><flowPara
          id="flowPara17463"
-         style="stroke-width:0.56579792">q22 H_DMSO_120-124/125_cell 98</flowPara></flowRoot>  </g>
+         style="stroke-width:0.56579792">q22 H_DMSO_120-124/125_cell 98</flowPara></flowRoot>    <flowRoot
+       xml:space="preserve"
+       id="flowRoot17469"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:16px;line-height:1.25;font-family:'Cambria Math';-inkscape-font-specification:'Cambria Math, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-feature-settings:normal;text-align:start;letter-spacing:0px;word-spacing:0px;writing-mode:lr-tb;text-anchor:start;fill:#0000ff;fill-opacity:1;stroke:none"
+       transform="matrix(0.26458333,0,0,0.26458333,81.784475,117.82604)"
+       inkscape:export-xdpi="600"
+       inkscape:export-ydpi="600"><flowRegion
+         id="flowRegion17471"
+         style="fill:#0000ff"><rect
+           id="rect17473"
+           width="222.23357"
+           height="50.507626"
+           x="-278.80209"
+           y="29.685015"
+           style="fill:#0000ff" /></flowRegion><flowPara
+         id="flowPara17475">Folder: VectorScripts</flowPara><flowPara
+         id="flowPara17477" /></flowRoot>    <text
+       xml:space="preserve"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:4.23333311px;line-height:1.25;font-family:'Cambria Math';-inkscape-font-specification:'Cambria Math, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-feature-settings:normal;text-align:start;letter-spacing:0px;word-spacing:0px;writing-mode:lr-tb;text-anchor:start;fill:#ff0000;fill-opacity:1;stroke:none;stroke-width:0.26458332"
+       x="8.0180874"
+       y="137.17279"
+       id="text17481"
+       inkscape:export-xdpi="600"
+       inkscape:export-ydpi="600"><tspan
+         sodipodi:role="line"
+         id="tspan17479"
+         x="8.0180874"
+         y="137.17279"
+         style="fill:#ff0000;stroke-width:0.26458332">Folder: 2D_image_scripts</tspan></text>
+  </g>
 </svg>

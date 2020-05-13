@@ -365,10 +365,16 @@ class ConvPlusLSTM:
                 # print(LSTMoutputs.shape)
 
                 loss = self.loss_fn(LSTMoutputs, laglabels.squeeze().long())
-                losslist.append(loss)
-
-                loss.backward()
                 
+                loss.backward()
+                losslist.append(loss.detach_())
+
+                del loss
+                del LSTMoutputs
+                del inputs
+                del outputs
+                del laglabels
+
                 self.combo_optimizer.step()
 
                 if it % 20 == 0:

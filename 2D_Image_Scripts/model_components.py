@@ -38,7 +38,7 @@ class convNN(torch.nn.Module):
 #             torch.nn.MaxPool2d(kernel_size = 2, stride = 2)
         )
         self.layer2 = torch.nn.Sequential(
-            torch.nn.Conv2d(16, 16, kernel_size=5, padding=1, stride=2),
+            torch.nn.Conv2d(16, 16, kernel_size=3, padding=1, stride=2),
             torch.nn.BatchNorm2d(16),
             torch.nn.ReLU(),
             # torch.nn.MaxPool2d(2)
@@ -46,7 +46,7 @@ class convNN(torch.nn.Module):
         )
 
         self.layer3 = torch.nn.Sequential(
-            torch.nn.Conv2d(16, 32, kernel_size=3, padding=1, stride=1),
+            torch.nn.Conv2d(16, 32, kernel_size=5, padding=1, stride=1),
             torch.nn.BatchNorm2d(32),
             torch.nn.ReLU(),
             torch.nn.MaxPool2d(2)
@@ -69,7 +69,7 @@ class convNN(torch.nn.Module):
 
         # self.drop_out = torch.nn.Dropout(p=0.3)
     
-        self.fc1 = torch.nn.Linear(3872, 512)
+        self.fc1 = torch.nn.Linear(2048, 512)
         torch.nn.init.xavier_normal_(self.fc1.weight)
         self.fc2 = torch.nn.Linear(512,64)
         torch.nn.init.xavier_normal_(self.fc2.weight)
