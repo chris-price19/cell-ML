@@ -33,7 +33,6 @@ data = pd.read_csv("C:\\Users\\as036\\.spyder-py3\\cellvector2.csv")
 
 #pick specific data that one might use in training
 df = pd.DataFrame(data, columns = ['time','x','y','z','stepsize','trackID','spheric','ellipticO','ellipticP','area','volume','time_int','env','plastic','assay'])
-
 #the following are simply interger maps and file cleaning for ease of data use
 assaymap = {22:1,26:2,27:3,28:4,29:5,30:6,33:7,34:8,35:9,36:10,37:11,38:12,41:13,43:14}
 mapping = {'L':0, 'H':2, 'M':1}
@@ -44,10 +43,10 @@ setup9 = setup9.replace({'env':new_map})
 
 
 #Picking out, in this case drug testing, setting to enviroments which are standardized
-#is_hol = setup9[(setup9['env'] == 7)]
-#is_hol = is_hol[(is_hol['time_int'] == 20.0)]
+#is_hol = setup9[(setup9['plastic'] != 1)]
+#is_hol = is_hol[(is_hol['time_int'] == 10.0)]
 
-#print(is_hol['assay'].unique())
+#       print(is_hol['plastic'].value_counts())
 '''
 time.sleep(10)
 set_try = setup9[is_hol]
@@ -69,7 +68,7 @@ vectormaker = pd.DataFrame(setup9, columns = ['stepsize','spheric','ellipticO','
 standardize_this = ['stepsize','spheric','ellipticO','ellipticP','area','volume']
 
 vectormaker[standardize_this] = (vectormaker[standardize_this]-vectormaker[standardize_this].min())/(vectormaker[standardize_this].max()-vectormaker[standardize_this].min())
-print(len(vectormaker['assay'].unique()))
+
 
 checkplastic = pd.DataFrame(vectormaker, columns = ['plastic'])
 
@@ -80,7 +79,7 @@ del setup9
 del df
 del data
 
-print(vectormaker['assay'].unique())
+
 
 
 
@@ -89,9 +88,9 @@ print(vectormaker['assay'].unique())
 
 #Checking the gpu
 if torch.cuda.is_available() == True:
-    print("SLINGSHOT ENGAGED")
+    print("Code Will Run Off GPU")
 else:
-    print("If your not first you're last")
+    print("Code Will Not Run, Please use a Computer with a GPU")
 
 
 
@@ -99,7 +98,7 @@ else:
 
 #Module Runs entire network
 class myRNN(nn.Module):
-    def __init__ (self, x ,  lags, layers,conv_layers, epochs):
+    def __init__ (self, x ,  lags, layers,conv_layers, epochs, minibatch):
         super(myRNN, self).__init__()
         if torch.cuda.is_available() == True:
             self.dtype = torch.cuda.FloatTensor
@@ -108,17 +107,17 @@ class myRNN(nn.Module):
         else:
             self.dtype = torch.FloatTensor
             
-            
+        self.minibatch = minibatch
         self.x = x
         self.layers = layers
         self.lags= lags
+        
         #Must be array denotes convolutional layer size, 4 layers currently
         self.lay = conv_layers
         
         self.epochs = epochs
         self.xshape = list(self.dataset()[0][-1].size())[0]
-        print(self.xshape)
-        print(self.dataset()[1][-1].shape)
+    
         self.yshape = self.dataset()[1][-1].shape
         
         #self.yshape = 
@@ -182,6 +181,119 @@ self.f_fgatex,
 self.w_ibias,
 ],lr = 2.5e-3 )
         self.loss = nn.CrossEntropyLoss().cuda()
+        print("data loading, this may take a while")
+        # This is the validator, it picks out 100 minibatches and saves them while dropping them from the training set. 
+        g = np.arange(0,12,1)
+        t = np.arange(0,3,1)
+        f = (3/4)/13
+        l = (1/4)/13
+        onehot = OneHotEncoder(sparse = False)
+        twohot = OneHotEncoder(sparse = False)
+        env_code = g.reshape(len(g),1)
+        pls_code = t.reshape(len(t),1)
+        onehot_env = onehot.fit_transform(env_code)
+        onehot_pls = twohot.fit_transform(pls_code)
+        
+
+        minibatch = torch.zeros(self.minibatch,1,self.lags, 6)
+        checkplas = torch.zeros(self.lags, self.minibatch, 1)
+        checkenv = torch.zeros(self.lags, self.minibatch, 1)
+        removal = torch.zeros(100,self.minibatch,1,self.lags,6).cuda()
+        checker = torch.zeros(100,self.minibatch,3).cuda()
+        checkerenv = torch.zeros(100,self.minibatch,12).cuda()
+        for i in range(100):
+            for j in range(self.minibatch):
+                #Picking assays, using weights for some balancing
+                i = random.choices(self.x['assay'].unique(),
+                weights = [f,f,f,f,f,f,l,l,l,l,l,l,l,l],
+                k = 1)
+
+                setup1 = vectormaker['assay'] == float(i[0])
+                setup1 = vectormaker[setup1]     
+                p = random.choice(setup1['plastic'].unique())            
+                setup2 = vectormaker['plastic'] == p
+                setup2 = vectormaker[setup2]
+                
+                g = random.choice(setup2['env'].unique())
+                setup3 = setup2['env'] == g
+                setup3 = setup2[setup3]
+                tre = random.choice(setup3['trackID'].unique())
+                setup4 = setup3['trackID'] == tre
+                setup4 = setup3[setup4]
+                while  setup4.shape[0]-(self.lags+1) < 0:
+                    it = 0
+                    tre = random.choice(setup3['trackID'].unique())
+                    setup4 = setup3['trackID'] == tre
+                    setup4 = setup3[setup4]
+                    it += 1
+                    if it == 500:
+                        print("infinite while loop")
+                        
+                
+                
+                
+                
+
+                
+                x = np.random.randint(0,setup4.shape[0]-(self.lags),1).item()
+                
+                setup5 = setup4.iloc[x:(x+self.lags),:]
+                
+                #print(setup5)
+                
+                
+            
+                check_plas = pd.DataFrame(setup5, columns = ['plastic'])
+                
+                check_env = pd.DataFrame(setup5, columns = ['env'])
+                #this line must match whatever data you are training against. 
+                setup5 = pd.DataFrame(setup5, columns = ['stepsize','spheric','ellipticO','ellipticP','area','volume'])
+                setup5 = torch.from_numpy(setup5.to_numpy())
+                setup5 = setup5.type(torch.cuda.FloatTensor)
+                
+                check_plas = torch.from_numpy(check_plas.to_numpy())
+                
+
+                
+                check_env = torch.from_numpy(check_env.to_numpy())
+
+                check_plas = check_plas.type(torch.cuda.FloatTensor)
+                
+                check_env = check_env.type(torch.cuda.FloatTensor)
+                
+                minibatch[j,:,:,:] = setup5.unsqueeze(dim=0)
+                checkplas[:,j,:] = check_plas
+                
+                checkenv[:,j,:] = check_env
+            
+            
+            integer_encoded = check_plas.reshape(len(check_plas),1)
+
+            minibatch = minibatch.type(self.dtype)
+            checkplas = checkplas[self.lags-1,:,:]
+            
+            checkenv = checkenv[self.lags-1,:,:]
+            encode_env = checkenv.cpu().numpy()
+            encode_env = onehot.transform(encode_env)
+            
+            encode_plas = checkplas.cpu().numpy()
+            encode_plas = twohot.transform(encode_plas)
+            
+            checkplas = checkplas.type(self.dtype)
+            checkenv = checkenv.type(self.dtype)
+            encode_plas = torch.from_numpy(encode_plas)
+            encode_env = torch.from_numpy(encode_env)
+            removal[i] = minibatch
+            checker[i] = encode_plas.type(torch.cuda.FloatTensor)
+            checkerenv[i] = encode_env.type(torch.cuda.FloatTensor)
+            del check_plas
+            del check_env 
+            checkplas = torch.zeros(self.lags, self.minibatch, 1)
+            checkenv = torch.zeros(self.lags, self.minibatch, 1)
+            
+        self.removal = removal
+        self.checker = checker
+        self.checkerenv = checkerenv
     #Glorot initilization for all linear layer
     def gloroti(self, input_layer, output_layer):
         weights = np.random.normal(0,np.sqrt(2/(input_layer+output_layer)),input_layer)
@@ -204,14 +316,16 @@ self.w_ibias,
         onehot_pls = twohot.fit_transform(pls_code)
         
 
-        minibatch = torch.zeros(24,1,self.lags, 6)
-        checkplas = torch.zeros(self.lags, 24, 1)
-        checkenv = torch.zeros(self.lags, 24, 1)
-        for j in range(24):
+        minibatch = torch.zeros(self.minibatch,1,self.lags, 6)
+        checkplas = torch.zeros(self.lags, self.minibatch, 1)
+        checkenv = torch.zeros(self.lags, self.minibatch, 1)
+        
+        for j in range(self.minibatch):
             #Picking assays, using weights for some balancing
             i = random.choices(self.x['assay'].unique(),
             weights = [f,f,f,f,f,f,l,l,l,l,l,l,l,l],
             k = 1)
+
             setup1 = vectormaker['assay'] == float(i[0])
             setup1 = vectormaker[setup1]     
             p = random.choice(setup1['plastic'].unique())            
@@ -220,7 +334,7 @@ self.w_ibias,
             g = random.choice(setup2['env'].unique())
             setup3 = setup2['env'] == g
             setup3 = setup2[setup3]
-            tre = random.choice(setup3['trackID'].unique() )
+            tre = random.choice(setup3['trackID'].unique())
             setup4 = setup3['trackID'] == tre
             setup4 = setup3[setup4]
             while  setup4.shape[0]-(self.lags+1) < 0:
@@ -232,11 +346,16 @@ self.w_ibias,
                 if it == 500:
                     print("infinite while loop")
                     
+            
+            
+            
+            
 
+            
             x = np.random.randint(0,setup4.shape[0]-(self.lags),1).item()
             
             setup5 = setup4.iloc[x:(x+self.lags),:]
-            
+        
             check_plas = pd.DataFrame(setup5, columns = ['plastic'])
             
             check_env = pd.DataFrame(setup5, columns = ['env'])
@@ -247,18 +366,20 @@ self.w_ibias,
             
             check_plas = torch.from_numpy(check_plas.to_numpy())
             
+
             
             check_env = torch.from_numpy(check_env.to_numpy())
 
             check_plas = check_plas.type(torch.cuda.FloatTensor)
             
             check_env = check_env.type(torch.cuda.FloatTensor)
+            
             minibatch[j,:,:,:] = setup5.unsqueeze(dim=0)
             checkplas[:,j,:] = check_plas
             
             checkenv[:,j,:] = check_env
         
-        
+        time.sleep(5)
         integer_encoded = check_plas.reshape(len(check_plas),1)
 
         minibatch = minibatch.type(self.dtype)
@@ -275,6 +396,7 @@ self.w_ibias,
         checkenv = checkenv.type(self.dtype)
         
         return (minibatch, encode_plas, encode_env)
+
         #Standard operating procedure, CNN-LSTM NET
     def forwardpass(self, g1):
         
@@ -342,13 +464,14 @@ self.w_ibias,
         acc = acc.cpu().data.numpy()
         return acc
     def descendagradient(self):
+        t0 = time.time()
         j = 0
-        track = np.zeros((int(self.epochs/200),1))
-        graph = np.zeros((int(self.epochs/200),1))
-        bins = np.arange(0,int(self.epochs/200),1)
+        track = np.zeros((int(self.epochs/100),1))
+        graph = np.zeros((int(self.epochs/100),1))
+        bins = np.arange(0,int(self.epochs/100),1)
         for i in range(self.epochs):
             loader = (self.dataset())
-            checkem = (self.dataset())
+            
             inpt = self.forwardpass(loader[0])
             
             
@@ -360,25 +483,35 @@ self.w_ibias,
             self.optimizer.zero_grad()
             self.optimizeruno.zero_grad()
             j += 1
-            if (i+1)% 200 == 0:
+            print("Timer", time.time()-t0)
+            if (i+1)% 100 == 0:
+                pick = np.random.randint(0,99,1)
+
+                checkem = self.removal[pick]
+                print(checkem.shape)
+                acc = self.checker[pick]
+
                 print("Loss",loss.cpu().item(), "at iteration", j)
-                print("low plasticity" , checkem[1][:,0].sum())
+                print("low plasticity" , acc[:,0].sum())
                 print("")
-                print("medium plasticity" , checkem[1][:,1].sum())
+                print("medium plasticity" , acc[:,1].sum())
                 print("")
-                print("high plasticity", checkem[1][:,2].sum())
+                print("high plasticity", acc[:,2].sum())
                 print("")
                 print(inpt[0].detach().cpu().numpy())
-                print( "Current Accuracy" , self.accuracycheck(checkem[0], checkem[1])[0])
+                print( "Current Accuracy" , self.accuracycheck(checkem, acc)[0])
                 print("Confusion Matrix")
-                track[int((i+1)/200-1)]= (loss.detach().cpu().numpy())/24
-                print(self.accuracycheck(checkem[0], checkem[1])[2])
-                graph[int((i+1)/200-1)] = self.accuracycheck(checkem[0], checkem[1])[0]
-            
+                track[int((i+1)/100-1)]= (loss.detach().cpu().numpy())/self.minibatch
+                print(self.accuracycheck(checkem, acc)[2])
+                graph[int((i+1)/100-1)] = self.accuracycheck(checkem,acc)[0]
+        
+
+        
         return graph, bins, track
 
     def accuracycheck(self, x, y ):
         loader = self.forwardpass(x).detach().cpu().numpy()
+        y = y.detach().cpu().numpy()
         checker = np.zeros((loader.shape))
         idx = np.zeros((len(loader)))
         summable = 0
@@ -394,7 +527,7 @@ self.w_ibias,
                 
             
         
-        summable = summable/24
+        summable = summable/self.minibatch
 
         
         
@@ -406,7 +539,7 @@ self.w_ibias,
         
 # first layer must be the dimensionality of the data, 
 #first input is data, second is lags, third is one neural layer, last is epochs
-rnn = myRNN(vectormaker,8  ,[4,80],[16,16,32,32],15000)
+rnn = myRNN(vectormaker,8  ,[4,80],[16,16,32,32],15000, 48)
 
 
 
@@ -415,7 +548,29 @@ graph, bins, track = rnn.descendagradient()
 fig, ax = plt.subplots()
 
 jones = ax.plot(bins, graph, '-r', color ='green', label = 'training accuracy', markersize = 0.5)
-mike = ax.plot(bins, track, '-r', color = 'blue', label = 'loss function')
-plt.title('Accuracy vs Training')
-plt.savefig('C:\\Users\\as036\\OneDrive\\Documents\\cancer_figures' + 'myCNNLSTM graph.png', markersize = 0.5)
+mike = ax.plot(bins, track, '-r', color = 'blue', label = 'loss function',markersize = 0.5)
 
+plt.show()
+print("Hello World")
+plt.title('Accuracy vs Training')
+print("done")
+plt.savefig('C:\\Users\\as036\\OneDrive\\Documents\\cancer_figures\\' + 'myCNNLSTM_graph.png')
+print("nice")
+
+
+
+fig, px = plt.subplots()
+print(1)
+sums = np.zeros(250)
+print((2))
+trick = np.zeros((4,4))
+print(3)
+for i in range(250):
+    print(i)
+    c0, c1, c2 = rnn.dataset()
+    sums[i] = rnn.accuracycheck(c0,c1)[0]
+    trick += rnn.accuracycheck(c0,c1)[2]
+
+print(trick/250)
+plt.hist(sums, bins = 20)
+plt.show()
