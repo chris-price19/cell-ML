@@ -201,7 +201,7 @@ self.w_ibias,
         removal = torch.zeros(100,self.minibatch,1,self.lags,6).cuda()
         checker = torch.zeros(100,self.minibatch,3).cuda()
         checkerenv = torch.zeros(100,self.minibatch,12).cuda()
-        for i in range(100):
+        for itr in range(100):
             for j in range(self.minibatch):
                 #Picking assays, using weights for some balancing
                 i = random.choices(self.x['assay'].unique(),
@@ -283,9 +283,12 @@ self.w_ibias,
             checkenv = checkenv.type(self.dtype)
             encode_plas = torch.from_numpy(encode_plas)
             encode_env = torch.from_numpy(encode_env)
-            removal[i] = minibatch
-            checker[i] = encode_plas.type(torch.cuda.FloatTensor)
-            checkerenv[i] = encode_env.type(torch.cuda.FloatTensor)
+            removal[itr] = minibatch
+            
+            checker[itr] = encode_plas.type(torch.cuda.FloatTensor)
+            
+            
+            checkerenv[itr] = encode_env.type(torch.cuda.FloatTensor)
             del check_plas
             del check_env 
             checkplas = torch.zeros(self.lags, self.minibatch, 1)
@@ -294,6 +297,7 @@ self.w_ibias,
         self.removal = removal
         self.checker = checker
         self.checkerenv = checkerenv
+        
     #Glorot initilization for all linear layer
     def gloroti(self, input_layer, output_layer):
         weights = np.random.normal(0,np.sqrt(2/(input_layer+output_layer)),input_layer)
