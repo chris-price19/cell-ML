@@ -45,8 +45,7 @@ setup9 = setup9.replace({'env':new_map})
 #Picking out, in this case drug testing, setting to enviroments which are standardized
 #is_hol = setup9[(setup9['plastic'] != 1)]
 #is_hol = is_hol[(is_hol['time_int'] == 10.0)]
-
-#       print(is_hol['plastic'].value_counts())
+print((setup9['plastic']==0).value_counts())
 '''
 time.sleep(10)
 set_try = setup9[is_hol]
@@ -205,7 +204,7 @@ self.w_ibias,
             for j in range(self.minibatch):
                 #Picking assays, using weights for some balancing
                 i = random.choices(self.x['assay'].unique(),
-                weights = [f,f,f,f,f,f,l,l,l,l,l,l,l,l],
+                weights = [f,0,0,0,0,0,0,0,0,0,0,0,0,0],
                 k = 1)
 
                 setup1 = vectormaker['assay'] == float(i[0])
@@ -295,6 +294,7 @@ self.w_ibias,
             checkenv = torch.zeros(self.lags, self.minibatch, 1)
             
         self.removal = removal
+        print(self.removal.shape)
         self.checker = checker
         self.checkerenv = checkerenv
         
@@ -310,7 +310,7 @@ self.w_ibias,
         #One hot encoder
         g = np.arange(0,12,1)
         t = np.arange(0,3,1)
-        f = (3/4)/13
+        f = (8/4)/13
         l = (1/4)/13
         onehot = OneHotEncoder(sparse = False)
         twohot = OneHotEncoder(sparse = False)
@@ -327,7 +327,7 @@ self.w_ibias,
         for j in range(self.minibatch):
             #Picking assays, using weights for some balancing
             i = random.choices(self.x['assay'].unique(),
-            weights = [f,f,f,f,f,f,l,l,l,l,l,l,l,l],
+            weights = [0,f,f,f,f,f,l,l,l,l,l,l,l,l],
             k = 1)
 
             setup1 = vectormaker['assay'] == float(i[0])
@@ -383,7 +383,7 @@ self.w_ibias,
             
             checkenv[:,j,:] = check_env
         
-        time.sleep(5)
+        
         integer_encoded = check_plas.reshape(len(check_plas),1)
 
         minibatch = minibatch.type(self.dtype)
@@ -446,7 +446,7 @@ self.w_ibias,
         
         h =  torch.matmul(h,self.final_layer)+self.finalweights
         
-        h = torch.tanh(self.linearlayer(h))
+        h = F.relu(self.linearlayer(h))
         h = self.finallayer(h)
         
         h = torch.nn.Softmax(dim=1)(h)
@@ -468,7 +468,7 @@ self.w_ibias,
         acc = acc.cpu().data.numpy()
         return acc
     def descendagradient(self):
-        t0 = time.time()
+        
         j = 0
         track = np.zeros((int(self.epochs/100),1))
         graph = np.zeros((int(self.epochs/100),1))
@@ -487,13 +487,13 @@ self.w_ibias,
             self.optimizer.zero_grad()
             self.optimizeruno.zero_grad()
             j += 1
-            print("Timer", time.time()-t0)
+            
             if (i+1)% 100 == 0:
                 pick = np.random.randint(0,99,1)
 
-                checkem = self.removal[pick]
+                checkem = self.removal[pick].squeeze(dim=0)
                 print(checkem.shape)
-                acc = self.checker[pick]
+                acc = self.checker[pick].squeeze(dim=0)
 
                 print("Loss",loss.cpu().item(), "at iteration", j)
                 print("low plasticity" , acc[:,0].sum())
