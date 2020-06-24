@@ -409,4 +409,5 @@ fig, ax = plt.subplots()
 jones = ax.plot(bins, graph, '-r', color ='green', label = 'training accuracy', markersize = 0.5)
 mike = ax.plot(bins, track, '-r', color = 'blue', label = 'loss function')
 plt.title('Accuracy vs Training')
+
 plt.savefig('C:\\Users\\as036\\OneDrive\\Documents\\cancer_figures' + 'myCNNLSTM graph.png', markersize = 0.5)
