@@ -4,7 +4,7 @@ Image classification of cell environments ENM 531
 # Data Structure
 The parent folder contains several subfolders of the image statistics along with a folder dedicated just to images. All I/O code should reference the parent folder as the 'root' to make it portable for anyone with access to the parent folder.
 
-- images/  
+ - images/  
       - raw-images/: contains .tif files labeled as: assay_plasticity_condition.tif  
       - split-images/: derived from raw-images. contains split .tif files labeled as assay_plasticity_condition_timeIndex.tif  
       - single-images/: derived from split-images. contains uniform-sized images of single cells labeled as assay_plasticity_condition_timeIndex_cellID.png
