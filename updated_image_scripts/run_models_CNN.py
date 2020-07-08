@@ -39,8 +39,8 @@ from libPARA import cellML_tools as cmt
 def train_test_split(datadir, fs):
 
     #### make train and test datasets
-    data_fraction = 0.5 # to speed up testing, use some random fraction of images.
-    train_fraction = 0.85
+    data_fraction = 1 # to speed up testing, use some random fraction of images.
+    train_fraction = 0.8
     test_fraction = 1 - train_fraction
     # np.random.seed(11820)
 
@@ -107,8 +107,7 @@ def parallel_run(args, datadir):
 
     test_set = cmt.single_cell_dataset(datadir + 'test/', img_dim)
     wghts = test_set.get_class_weights(pattern)
-    # test_sampler = WeightedRandomSampler(torch.from_numpy(wghts), len(wghts))
-    # test_sampler = torch.utils.data.distributed.DistributedSampler(test_set, num_replicas=args.world_size, rank=args.local_rank)
+    
     test_sampler = cmt.WeightedDistributedSampler(test_set, wghts, num_replicas=args.world_size, rank=args.local_rank)
 
     train_randloader = DataLoader(train_set, batch_size=bsize, sampler = train_sampler, pin_memory = True)#, num_workers= 4) #  shuffle=True,
@@ -132,6 +131,8 @@ def parallel_run(args, datadir):
     s1, s2, s3 = cnetmodel.test(cnetmodel.train_data)
 
     print('end training data acc check')
+    print('\n')
+    print('##############')
 
     s1, s2, s3 = cnetmodel.test(cnetmodel.valid_data)
 
@@ -177,7 +178,6 @@ def main(datadir):
     parallel_run(args, datadir)
 
     return
-
 
 
 ################################# random sampler, pure CNN

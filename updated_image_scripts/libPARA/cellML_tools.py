@@ -162,36 +162,47 @@ class WeightedDistributedSampler(Sampler):
 
 class time_coherent_sampler(Sampler):
 
-    def __init__(self, data_source, bsize = 10):
+    def __init__(self, data_source, nlags, bsize = 10):
 
         self.data_source = data_source
        
         self.filenames = self.data_source.filenames
        
-        self.id_map = np.array([int(x.split('_')[0].split('c')[-1]) for x in self.filenames])
+        self.id_map = np.array([[int(x.split('_')[0].split('c')[-1]), x.split('_')[2]] for x in self.filenames])
         # print(self.id_map)
-        self.unique, counts = np.unique(self.id_map, return_counts = True)
-
-        counts = counts-6+1
-       
-        self.weights = torch.as_tensor(1. / counts)
+        pattern = np.unique(self.id_map[:,1])
+        # print(pattern)
+        self.unique, counts = np.unique(self.id_map, axis=0, return_counts = True)
+        # print(self.unique)
+        # print(counts)
+        # unique is unique cell IDs, counts is number of instances of each cell ID
+        self.weights = np.zeros(len(self.unique))
+        # tlags = 0
+        for pi, pp in enumerate(pattern):
+            # values[pi] = 1. / ''.join(self.filenames).count(pp)
+            class_weight = 1. / np.sum(counts[self.unique[:,1] == pp] - nlags + 1)
+            # tlags += np.sum(counts[self.unique[:,1] == pp] - nlags + 1)
+            self.weights[self.unique[:,1] == pp] = class_weight
+        
+        # print(tlags)
+        # print(self.weights)
+        self.unique = self.unique[:,0].astype(np.int32)
+        self.id_map = self.id_map[:,0].astype(np.int32)
+        # print(self.unique)
+        self.weights = torch.as_tensor(self.weights)
         self.bsize = bsize
 
     def __iter__(self):
 
-        n = len(self.unique)
-        
-        # unweighted
-        # cinds = torch.randint(high=n, size=(n,)).numpy()
-        ## ############
-        # print(cinds)
-
+        # g = torch.Generator()
+        # g.manual_seed(0)
         # weighted
         ccount = 0
-        cinds = torch.multinomial(self.weights, len(self.weights)).numpy()
+        cinds = torch.multinomial(self.weights, len(self.weights), replacement=True).numpy()
+
         self.allinds = []
         for cc in cinds:
-
+            # print(cc)
             self.allinds.extend(np.where(np.isin(self.id_map, self.unique[cc]))[0].tolist())
             ccount += 1
             
@@ -203,6 +214,8 @@ class time_coherent_sampler(Sampler):
         
         if len(self.allinds) > 0:
             yield self.allinds
+            ccount = 0
+            self.allinds= []
 
         # print(np.sum((np.diff(self.allinds)>1)))
         
@@ -211,6 +224,9 @@ class time_coherent_sampler(Sampler):
     def __len__(self):
 
         return len(self.allinds)
+
+    def set_epoch(self, epoch):
+        self.epoch = epoch
 
 
 class distributed_balanced_time_coherent_sampler(Sampler):
@@ -297,19 +313,22 @@ class distributed_balanced_time_coherent_sampler(Sampler):
     def set_epoch(self, epoch):
         self.epoch = epoch
 
+
+
+
 class ConvNet:
     # Initialize the class
     def __init__(self, train_data, valid_data, lr):
 
-        # if torch.cuda.is_available() == True:
-        #     self.dtype_double = torch.cuda.FloatTensor
-        #     self.dtype_int = torch.cuda.LongTensor
-        #     self.device = torch.device("cuda:0") 
-        #     # cudnn.benchmark = True
-        # else:
-        #     self.dtype_double = torch.FloatTensor
-        #     self.dtype_int = torch.LongTensor
-        #     self.device = torch.device("cpu")
+        if torch.cuda.is_available() == True:
+            self.dtype_double = torch.cuda.FloatTensor
+            self.dtype_int = torch.cuda.LongTensor
+            # self.device = torch.device("cuda:0") 
+            # cudnn.benchmark = True
+        else:
+            self.dtype_double = torch.FloatTensor
+            self.dtype_int = torch.LongTensor
+            # self.device = torch.device("cpu")
         
         self.train_data = train_data
         # pass in data loader
@@ -325,7 +344,7 @@ class ConvNet:
 
     def adjust_learning_rate(self, optimizer, epoch):
         """Sets the learning rate to the initial LR decayed by 10 every 30 epochs"""
-        self.lr = self.lr * (0.1 ** (epoch // 30))
+        self.lr = self.lr * (0.1 ** (epoch // 50))
         for param_group in optimizer.param_groups:
             param_group['lr'] = self.lr
         return
@@ -395,10 +414,10 @@ class ConvNet:
                         
             start_time = timeit.default_timer()
 
-            if summaries[0] < 0.8:
-                del images
-                del labels
-                del outputs
+            if summaries[0] < 0.5:
+                # del images
+                # del labels
+                # del outputs
                 torch.cuda.ipc_collect()
                 
                 return summaries
@@ -461,10 +480,12 @@ class ConvNet:
                 summaries2 /= size
                 # summaries3 /= size
                 print(summaries1)
+                print('class balance')
                 print(summaries2)
+                print('confusion matrix')
                 print(summaries3)
-                # print('avg loss %f' % summaries[0])
-                # print('accuracy %f' % (summaries[1]*100))
+                print('avg loss %f' % summaries1[0])
+                print('accuracy %f' % (summaries1[1]*100))
                 # print('epoch %f, time %f s' % (summaries[2], summaries[3]))
 
         return summaries1, summaries2, summaries3
@@ -490,13 +511,23 @@ class ConvPlusLSTM:
         # pass in data loader
         self.valid_data = valid_data
 
-        self.cnet = mc.convOnly().float() #type(self.dtype_double)
+        self.cnet = mc.convOnly().float() #.cuda() #type(self.dtype_double)
         
-        self.x_dim = 64
-        self.y_dim = 32
-        self.nlags = nlags
+        # print(type(self.cnet.state_dict()))
+        # print(list(self.cnet.state_dict().keys())[-1])
+        last_dim = next(reversed(self.cnet.state_dict().values())).shape
 
-        self.lstm = mc.LSTM(self.x_dim, self.y_dim, self.nlags, hidden_dim).cuda()
+        # print(last_dim[0])
+        # sys.exit()
+
+        self.x_dim = last_dim[0]
+        self.nlags = nlags
+        self.hidden_dim = hidden_dim
+
+        # self.y_dim = 32
+        # self.lstm = mc.LSTM(self.x_dim, self.y_dim, self.nlags, hidden_dim).cuda()
+
+        self.lstm = mc.torchLSTM(self.x_dim, hidden_dim, nlags).float() #.cuda()
 
         self.loss_fn = torch.nn.CrossEntropyLoss(reduction='mean')
 
@@ -512,7 +543,7 @@ class ConvPlusLSTM:
 
     def adjust_learning_rate(self, optimizer, epoch):
         """Sets the learning rate to the initial LR decayed by 10 every 30 epochs"""
-        self.lr = self.lr * (0.1 ** (epoch // 100))
+        self.lr = self.lr * (0.1 ** (epoch // 50))
         for param_group in optimizer.param_groups:
             param_group['lr'] = self.lr
         return
@@ -546,7 +577,8 @@ class ConvPlusLSTM:
                 images = ((images - images.mean(dim=0)) / (images.std(dim=0) + 1e-8)).float()
 
                 images, labels = images.cuda(non_blocking=True), labels.cuda(non_blocking=True)
-                                
+                
+                # print('image')
                 outputs = self.cnet(images)
 
                 restack = []
@@ -602,10 +634,10 @@ class ConvPlusLSTM:
                         
             start_time = timeit.default_timer()
 
-            if summaries[0] < 0.8:
-                del images
-                del labels
-                del outputs
+            if summaries[0] < 0.5:
+                # del images
+                # del labels
+                # del outputs
                 torch.cuda.ipc_collect()
                 
                 return summaries
@@ -688,66 +720,76 @@ class ConvPlusLSTM:
                 summaries2 /= size
                 # summaries3 /= size
                 print(summaries1)
+                print('class balance')
                 print(summaries2)
+                print('confusion matrix')
                 print(summaries3)
-                # print('avg loss %f' % summaries[0])
-                # print('accuracy %f' % (summaries[1]*100))
+                print('avg loss %f' % summaries1[0])
+                print('accuracy %f' % (summaries1[1]*100))
                 # print('epoch %f, time %f s' % (summaries[2], summaries[3]))
 
         return summaries1, summaries2, summaries3
 
+class Identity(torch.nn.Module):
+    def __init__(self):
+        super(Identity, self).__init__()
+        
+    def forward(self, x):
+        return x
 
-if __name__ == "__main__":
+
+
+# if __name__ == "__main__":
 	
-    pd.set_option('display.expand_frame_repr', False, 'display.max_columns', None)
-    cwd = os.getcwd()
+#     pd.set_option('display.expand_frame_repr', False, 'display.max_columns', None)
+#     cwd = os.getcwd()
 
-    if 'Chris Price' in cwd:
-        datadir = 'C:\\Users\\Chris Price\\Box Sync\\Plasticity_Protrusions_ML\\'
-    elif 'ccarr' in cwd:
-        datadir = 'C:\\Users\\ccarr_nj7afa9\\Box Sync\\Plasticity_Protrusions_ML\\'
-    else:
-        print('add your path to Plasticity_Protrusions_ML here')
-        sys.exit()
+#     if 'Chris Price' in cwd:
+#         datadir = 'C:\\Users\\Chris Price\\Box Sync\\Plasticity_Protrusions_ML\\'
+#     elif 'ccarr' in cwd:
+#         datadir = 'C:\\Users\\ccarr_nj7afa9\\Box Sync\\Plasticity_Protrusions_ML\\'
+#     else:
+#         print('add your path to Plasticity_Protrusions_ML here')
+#         sys.exit()
 
-    bsize = 256
-# ################################# random sampler
-#     cell_set = single_cell_dataset(datadir +'images\\data-images\\train_series.zip')
-#     test_randloader = DataLoader(cell_set, batch_size=bsize, shuffle=True)
+#     bsize = 256
+# # ################################# random sampler
+# #     cell_set = single_cell_dataset(datadir +'images\\data-images\\train_series.zip')
+# #     test_randloader = DataLoader(cell_set, batch_size=bsize, shuffle=True)
 
-    train_set = single_cell_dataset(datadir +'images\\data-images\\train_series.zip')
-    test_set = single_cell_dataset(datadir +'images\\data-images\\test_series.zip')
+#     train_set = single_cell_dataset(datadir +'images\\data-images\\train_series.zip')
+#     test_set = single_cell_dataset(datadir +'images\\data-images\\test_series.zip')
 
-    train_randloader = DataLoader(train_set, batch_size=bsize, shuffle=True)
-    test_randloader = DataLoader(test_set, batch_size=bsize, shuffle=True)
+#     train_randloader = DataLoader(train_set, batch_size=bsize, shuffle=True)
+#     test_randloader = DataLoader(test_set, batch_size=bsize, shuffle=True)
 
-    # for it, (images, labels, ids) in enumerate(test_randloader):
-    #     if it < 1:
-    #         print(ids)
-    #     else:
-    #         break
-####################################   
+#     # for it, (images, labels, ids) in enumerate(test_randloader):
+#     #     if it < 1:
+#     #         print(ids)
+#     #     else:
+#     #         break
+# ####################################   
 
-# ############################## time sampler
-#     num_lags = 6
+# # ############################## time sampler
+# #     num_lags = 6
 
-#     cohsample = time_coherent_sampler(cell_set, batch_size = int(bsize/num_lags))
-#     # this is pretty garbage, but as long as batch_size here is large enough relative to batch_size in the sampler, you will get the complete time series returned for all the cells.
-#     # needs a better implementation with sampler, batch_sampler. or honestly just a batching class that's not a dataloader.
-#     test_cohloader = DataLoader(cell_set, sampler=cohsample, batch_size = 1000)
+# #     cohsample = time_coherent_sampler(cell_set, batch_size = int(bsize/num_lags))
+# #     # this is pretty garbage, but as long as batch_size here is large enough relative to batch_size in the sampler, you will get the complete time series returned for all the cells.
+# #     # needs a better implementation with sampler, batch_sampler. or honestly just a batching class that's not a dataloader.
+# #     test_cohloader = DataLoader(cell_set, sampler=cohsample, batch_size = 1000)
 
-#     for it, (images, labels, ids) in enumerate(test_cohloader):
+# #     for it, (images, labels, ids) in enumerate(test_cohloader):
 
-#         if it < 1:
-#             print(len(np.unique(ids[0])))
-#             print(len(ids[0]))
-#             print(np.unique(ids[0]))
-#             print(ids[1])
-#         else:
-#             break
-# ###################################
+# #         if it < 1:
+# #             print(len(np.unique(ids[0])))
+# #             print(len(ids[0]))
+# #             print(np.unique(ids[0]))
+# #             print(ids[1])
+# #         else:
+# #             break
+# # ###################################
 	
-########### test basic CNN
+# ########### test basic CNN
 
-    cnetmodel = ConvNet(train_randloader, test_randloader) #, testdata)
-    lossL = cnetmodel.train(epochs = 5)
+#     cnetmodel = ConvNet(train_randloader, test_randloader) #, testdata)
+#     lossL = cnetmodel.train(epochs = 5)

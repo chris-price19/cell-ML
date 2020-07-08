@@ -73,7 +73,8 @@ class convNN(torch.nn.Module):
             torch.nn.Conv2d(128, 128, kernel_size=3, padding=1, stride=1),
             torch.nn.ReLU(),
             torch.nn.BatchNorm2d(128),
-            torch.nn.MaxPool2d(2)
+            torch.nn.MaxPool2d(2),
+            torch.nn.Dropout(p=0.25)
 #             torch.nn.MaxPool2d(kernel_size = 2, stride = 2)
         )
         # self.layer3 = torch.nn.Sequential(
@@ -83,7 +84,7 @@ class convNN(torch.nn.Module):
         #     torch.nn.MaxPool2d(2)
         #  )
 
-        # self.drop_out = torch.nn.Dropout(p=0.3)
+        # self.drop_out = torch.nn.Dropout(p=0.25)
     
         self.fc1 = torch.nn.Linear(18432, 512)
         torch.nn.init.xavier_normal_(self.fc1.weight)
@@ -93,6 +94,7 @@ class convNN(torch.nn.Module):
         torch.nn.init.xavier_normal_(self.fc3.weight)
         
     def forward(self, x):
+        # print('wrong forward')
         out = self.layer1(x)
         # print(out.shape)
         out = self.layer2(out)
@@ -177,6 +179,7 @@ class convOnly(torch.nn.Module):
         torch.nn.init.xavier_normal_(self.fc2.weight)
         
     def forward(self, x):
+        # print('wrong forward')
         out = self.layer1(x)
         # print(out.shape)
         out = self.layer2(out)
@@ -294,3 +297,51 @@ class LSTM(torch.nn.Module):
         out = self.fc2(H)
 
         return out
+
+
+class torchLSTM(torch.nn.Module):
+    # Initialize the class
+    def __init__ (self, lstm_in, lstm_hidden, nlags, lstm_layers = 1):
+        super(torchLSTM, self).__init__()
+
+        if torch.cuda.is_available() == True:
+            self.dtype_double = torch.cuda.FloatTensor
+            self.dtype_int = torch.cuda.LongTensor
+        else:
+            self.dtype_double = torch.FloatTensor
+            self.dtype_int = torch.LongTensor
+
+        self.lstm_in = lstm_in
+        self.lstm_hidden = lstm_hidden
+        self.lstm_layers = lstm_layers
+        self.nlags = nlags
+
+        self.lstm = torch.nn.LSTM(lstm_in, lstm_hidden, num_layers = lstm_layers)
+
+        # sequence length is the number of lags
+        # input dimension is the number of time series / features
+        # hidden dim is the number of hidden features
+
+        ## can add an outdim, out bias layer here. just a linear layer to map from hidden dim
+
+        self.fc1 = torch.nn.Linear(lstm_hidden, 3)
+
+        torch.nn.init.xavier_normal_(self.fc1.weight)
+
+    def forward(self, X):
+
+        h0 = torch.zeros(self.lstm_layers, X.shape[1], self.lstm_hidden).type(self.dtype_double).requires_grad_() #.cuda()
+        c0 = torch.zeros(self.lstm_layers, X.shape[1], self.lstm_hidden).type(self.dtype_double).requires_grad_()
+
+        out, (ht, ct) = self.lstm(X, (h0, c0))
+
+        conv_seq_len = out.size(0)
+        batch_size = out.size(1)
+        hidden_size = out.size(-1)
+
+        # print(ht.shape)
+        # print(out.shape)
+        output = torch.tanh(self.fc1(ht.squeeze(0)))
+        # output = torch.tanh(self.fc1(out))
+
+        return output
