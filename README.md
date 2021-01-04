@@ -1,5 +1,5 @@
 # cell-ML
-Image classification of cell environments ENM 531
+Image classification of cell environments
 
 # Data Structure
 The parent folder contains several subfolders of the image statistics along with a folder dedicated just to images. All I/O code should reference the parent folder as the 'root' to make it portable for anyone with access to the parent folder.
