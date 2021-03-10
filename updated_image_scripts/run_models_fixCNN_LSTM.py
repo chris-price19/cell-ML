@@ -15,12 +15,13 @@ import argparse
 import torch.multiprocessing as mp
 import torchvision
 import torch.distributed as dist
+# from summary import summary
 
 import timeit
 
 from torch.autograd import Variable
 import pandas as pd
-from skimage.transform import resize
+# from skimage.transform import resize
 
 from zipfile import ZipFile
 from PIL import Image
@@ -33,6 +34,34 @@ import importlib
 # from lib import cellML_tools as cmt
 from libPARA import cellML_tools as cmt
 from libPARA import model_components as mc
+
+# def test_class_balance_lags():
+    
+    # laglabels = []
+    # batch_lags = 0
+    # for it, (images, labels, ids) in enumerate(train_loader):
+        
+    #     unq, cnt = np.unique(ids[0], return_counts=True)
+    #     batch_lags += np.sum(cnt - nlags+1)
+    #     li = 0
+
+    #     for ui, uu in enumerate(unq):
+    #         ci = 0
+    #         while ci < cnt[ui] - nlags + 1:
+    #             # restack.append(outputs[li:li+nlags,:])
+    #             laglabels.extend(labels[li])
+    #             ci += 1
+    #             li += 1
+    #         li += nlags-1
+    #     # print(restack)
+    #     # laglabels2 = torch.stack(laglabels)
+    # print(batch_lags)
+    # u, c = np.unique(laglabels, return_counts=True)
+    # # print(u)
+    # # print(c)
+    # print(c / np.sum(c))
+
+    # return
 
 def train_test_split(datadir, fs, dumpdir = None):
 
@@ -61,9 +90,6 @@ def train_test_split(datadir, fs, dumpdir = None):
 
     trainfiles = [f for f in filenames if int(f.split('_')[0].split('c')[-1]) in utrain]
     testfiles = [f for f in filenames if int(f.split('_')[0].split('c')[-1]) in utest]
-
-    if dumpdir is None:
-        dumpdir = datadir
 
     os.system('rm -rf '+ dumpdir + 'train')
     os.system('mkdir ' + dumpdir + 'train')
@@ -115,47 +141,20 @@ def parallel_run(args, datadir, dumpdir=None):
     else:
         pinning = False
 
-
-    train_sampler = cmt.distributed_balanced_time_coherent_sampler(train_set, nlags, bsize, num_replicas=args.world_size, rank=args.local_rank)
-    
+    train_sampler = cmt.distributed_balanced_time_coherent_sampler(train_set, nlags, bsize, num_replicas=args.world_size, rank=args.local_rank)    
     train_loader = DataLoader(train_set, batch_sampler = train_sampler, pin_memory = pinning)
-
-    # laglabels = []
-    # batch_lags = 0
-    # for it, (images, labels, ids) in enumerate(train_loader):
-        
-    #     unq, cnt = np.unique(ids[0], return_counts=True)
-    #     batch_lags += np.sum(cnt - nlags+1)
-    #     li = 0
-
-    #     for ui, uu in enumerate(unq):
-    #         ci = 0
-    #         while ci < cnt[ui] - nlags + 1:
-    #             # restack.append(outputs[li:li+nlags,:])
-    #             laglabels.extend(labels[li])
-    #             ci += 1
-    #             li += 1
-    #         li += nlags-1
-    #     # print(restack)
-    #     # laglabels2 = torch.stack(laglabels)
-    # print(batch_lags)
-    # u, c = np.unique(laglabels, return_counts=True)
-    # # print(u)
-    # # print(c)
-    # print(c / np.sum(c))
 
     test_sampler = cmt.distributed_balanced_time_coherent_sampler(test_set, nlags, bsize, num_replicas=args.world_size, rank=args.local_rank)
     test_loader = DataLoader(test_set, batch_sampler = test_sampler, pin_memory = pinning)
-
-    # sys.exit()
 
     # ########### test combined CNN LSTM
 
     cnetLSTMmodel = cmt.ConvPlusLSTM(train_loader, test_loader, nlags, hidden)
 
     load_cnn = True
+    train_cnn = False
 
-    if load_cnn == True:
+    if load_cnn:
         
         ######### key to change ################
         load_dir = '/home/chrispr/mem/chrispr/ml_cell/conv/'
@@ -169,45 +168,58 @@ def parallel_run(args, datadir, dumpdir=None):
 
         cnetLSTMmodel.cnet.load_state_dict(state_dict)
         
-        #### cut the last layer. this fucks it up
-
+        # ideally dynamically get the name but this just picks the bias layer.
         last_key = next(reversed(cnetLSTMmodel.cnet.state_dict().keys()))
-        # print(last_key)
-        # cnetLSTMmodel.cnet.last_key = cmt.Identity()
-        # all_but_last = list(cnetLSTMmodel.cnet.children())[:-1]
-        # cnetLSTMmodel.cnet = torch.nn.Sequential(*all_but_last)
+        # print(list(cnetLSTMmodel.cnet.children()))
 
-        #####
-
-        #####
-
-        print(list(cnetLSTMmodel.cnet.children()))
-
-        # may need to manually adjust the name
+        # set the last layer to identity. manually adjust the name
         cnetLSTMmodel.cnet.fc3 = cmt.Identity()
 
-        cnetLSTMmodel.cnet.eval()
-
-        # print(list(cnetLSTMmodel.cnet.children()))
-        # print(cnetLSTMmodel.cnet.state_dict())
+        if not train_cnn:
+            fup = False
+            cnetLSTMmodel.cnet = cnetLSTMmodel.cnet.eval()
+            for parameter in cnetLSTMmodel.cnet.parameters():
+                parameter.requires_grad = False
+        else:
+            fup = True
 
         last_dim = next(reversed(cnetLSTMmodel.cnet.state_dict().values())).shape
 
-        print(last_dim[0])
-        # should be reasonable value
+        print('features entering LSTM: %d' % (last_dim[0]))
 
-        cnetLSTMmodel.x_dim = last_dim[0]
-        
-        cnetLSTMmodel.lstm = mc.torchLSTM(cnetLSTMmodel.x_dim, cnetLSTMmodel.hidden_dim, cnetLSTMmodel.nlags).float() #.cuda()
-        
+        cnetLSTMmodel.x_dim = last_dim[0]        
+        cnetLSTMmodel.lstm = mc.torchLSTM(cnetLSTMmodel.x_dim, cnetLSTMmodel.hidden_dim, cnetLSTMmodel.nlags).float()        
         cnetLSTMmodel.combo_optimizer = torch.optim.Adam(list(cnetLSTMmodel.lstm.parameters()), lr = cnetLSTMmodel.lr)
 
-    cnetLSTMmodel.cnet.cuda(gpu)
-    cnetLSTMmodel.lstm.cuda(gpu)
+        cnetLSTMmodel.cnet.cuda(gpu)
+        if train_cnn:
+            cnetLSTMmodel.cnet = torch.nn.parallel.DistributedDataParallel(cnetLSTMmodel.cnet, device_ids=[gpu], find_unused_parameters=fup)
 
-    cnetLSTMmodel.cnet = torch.nn.parallel.DistributedDataParallel(cnetLSTMmodel.cnet, device_ids=[gpu], find_unused_parameters=True)
-    cnetLSTMmodel.cnet.eval()
-    cnetLSTMmodel.lstm = torch.nn.parallel.DistributedDataParallel(cnetLSTMmodel.lstm, device_ids=[gpu], find_unused_parameters=True)
+        cnetLSTMmodel.lstm.cuda(gpu)
+        cnetLSTMmodel.lstm = torch.nn.parallel.DistributedDataParallel(cnetLSTMmodel.lstm, device_ids=[gpu], find_unused_parameters=fup)
+
+    else:
+
+        cnetLSTMmodel.cnet.cuda(gpu)
+        cnetLSTMmodel.lstm.cuda(gpu)
+
+        cnetLSTMmodel.cnet = torch.nn.parallel.DistributedDataParallel(cnetLSTMmodel.cnet, device_ids=[gpu], find_unused_parameters=True)
+        cnetLSTMmodel.lstm = torch.nn.parallel.DistributedDataParallel(cnetLSTMmodel.lstm, device_ids=[gpu], find_unused_parameters=True)
+
+    if dist.get_rank() == 0:
+
+        print('model params')
+        layers = []
+        for n, p in cnetLSTMmodel.cnet.named_parameters():
+            if(p.requires_grad) and ("bias" not in n):
+                layers.append(n)
+        print('cnn params %d' % (len(layers)))
+
+        layers = []
+        for n, p in cnetLSTMmodel.lstm.named_parameters():
+            if(p.requires_grad) and ("bias" not in n):
+                layers.append(n)
+        print('lstm params %d' % (len(layers)))
 
     # print('train')
     lossL = cnetLSTMmodel.train(500, len(train_set))
@@ -234,84 +246,6 @@ def parallel_run(args, datadir, dumpdir=None):
     return
 
 
-def serial_run(datadir, fs, dumpdir=None):
-
-    if dumpdir is None:
-        dumpdir = datadir
-
-    # print(torch.cuda.device_count())
-    # print(torch.cuda.current_device())
-    # print(torch.cuda.get_device_name(0))
-    # torch.cuda.device()
-
-    # sys.exit()
-    
-
-    bsize = 5
-    img_dim = 72
-
-    nlags = 6
-    hidden = 128
-
-    train_set = cmt.single_cell_dataset(dumpdir + 'train' + fs, img_dim)
-    test_set = cmt.single_cell_dataset(dumpdir + 'test' + fs, img_dim)
-
-    if torch.cuda.is_available() == True:
-        pinning = True
-    else:
-        pinning = False
-
-
-    train_coherentsampler = cmt.time_coherent_sampler(train_set, nlags, bsize = bsize)
-    # print(train_coherentsampler.counts)
-    test_coherentsampler = cmt.time_coherent_sampler(test_set, nlags, bsize = bsize)
-
-    train_loader = DataLoader(train_set, batch_sampler = train_coherentsampler, pin_memory = pinning)
-    test_loader = DataLoader(test_set, batch_sampler = test_coherentsampler, pin_memory = pinning)
-
-    # total = np.vstack([i[1].detach().numpy() for i in train_loader])
-    laglabels = []
-    batch_lags = 0
-    for it, (images, labels, ids) in enumerate(train_loader):
-        
-        unq, cnt = np.unique(ids[0], return_counts=True)
-        batch_lags += np.sum(cnt - nlags+1)
-        li = 0
-
-        for ui, uu in enumerate(unq):
-            ci = 0
-            while ci < cnt[ui] - nlags + 1:
-                # restack.append(outputs[li:li+nlags,:])
-                laglabels.extend(labels[li])
-                ci += 1
-                li += 1
-            li += nlags-1
-        # print(restack)
-        # laglabels2 = torch.stack(laglabels)
-    print(batch_lags)
-    u, c = np.unique(laglabels, return_counts=True)
-    # print(u)
-    # print(c)
-    print(c / np.sum(c))
-    
-
-    cnetLSTMmodel = cmt.ConvPlusLSTM(train_loader, test_loader, nlags, hidden)
-
-    lossL = cnetLSTMmodel.train(1, len(train_set))
-
-    trainloss, vsize, train_frac, c_matrix = cnetLSTMmodel.test(cnetLSTMmodel.train_data)
-    testloss, vsize, test_frac, c_matrix = cnetLSTMmodel.test(cnetLSTMmodel.valid_data)
-
-    print('training acc = %f' % train_frac)
-    print('testing acc = %f' % test_frac)
-
-    print('confusion matrix')
-    print(c_matrix)
-
-
-    return
-
-
 def main(datadir, fs, dumpdir = None):
 
     if dumpdir is None:
@@ -323,7 +257,8 @@ def main(datadir, fs, dumpdir = None):
 
         if torch.cuda.is_available() == True:
 
-            # from libPARA import cellML_tools as cmt
+            # run command:
+            # (CUDA_VISIBLE_DEVICES=6,7) python -m torch.distributed.launch --nproc_per_node=2 run_models_fixCNN_LSTM.py --gpus=2
 
             print('device count')
             print(torch.cuda.device_count())
@@ -346,13 +281,18 @@ def main(datadir, fs, dumpdir = None):
             torch.cuda.set_device(args.local_rank)
 
             parallel_run(args, dumpdir)
+
+        else:
+
+            print('no gpu, can\'t run parallel, quitting')
+            sys.exit()    
+
     else:
+        
+        print('find serial run in OneNote')
+        sys.exit()
 
-        # from lib import cellML_tools as cmt
-
-        print('running serial')
-        # sys.exit()
-        serial_run(dumpdir, fs)
+        # serial_run(dumpdir, fs)
 
     return
 
@@ -378,6 +318,6 @@ if __name__ == '__main__':
         print('add your path to Plasticity_Protrusions_ML here')
         sys.exit()
 
-    train_test_split(datadir, fs, dumpdir)
+    # train_test_split(datadir, fs, dumpdir)
 
     main(datadir, fs, dumpdir)

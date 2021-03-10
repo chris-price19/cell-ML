@@ -173,7 +173,7 @@ class convOnly(torch.nn.Module):
 
         # self.drop_out = torch.nn.Dropout(p=0.3)
     
-        self.fc1 = torch.nn.Linear(10368, 512)
+        self.fc1 = torch.nn.Linear(18432, 512)
         torch.nn.init.xavier_normal_(self.fc1.weight)
         self.fc2 = torch.nn.Linear(512,64)
         torch.nn.init.xavier_normal_(self.fc2.weight)

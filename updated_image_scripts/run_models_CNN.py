@@ -36,7 +36,10 @@ import re
 from libPARA import cellML_tools as cmt
 # from libPARA import model_components as mc
 
-def train_test_split(datadir, fs):
+def train_test_split(datadir, fs, dumpdir = None):
+
+    if dumpdir is None:
+        dumpdir = datadir
 
     #### make train and test datasets
     data_fraction = 1 # to speed up testing, use some random fraction of images.
@@ -61,28 +64,31 @@ def train_test_split(datadir, fs):
     trainfiles = [f for f in filenames if int(f.split('_')[0].split('c')[-1]) in utrain]
     testfiles = [f for f in filenames if int(f.split('_')[0].split('c')[-1]) in utest]
 
-    os.system('rm -rf '+ datadir + 'train')
-    os.system('mkdir ' + datadir + 'train')
+    os.system('rm -rf '+ dumpdir + 'train')
+    os.system('mkdir ' + dumpdir + 'train')
 
-    os.system('rm -rf '+ datadir + 'test')
-    os.system('mkdir ' + datadir + 'test')
+    os.system('rm -rf '+ dumpdir + 'test')
+    os.system('mkdir ' + dumpdir + 'test')
 
     zipIn = ZipFile(open(datadir + 'cell_series.zip', 'rb'))
 
     for ti, tt in enumerate(trainfiles):
 
-        zipIn.extract(tt, path=datadir + 'train')
+        zipIn.extract(tt, path=dumpdir + 'train')
 
     for ti, tt in enumerate(testfiles):
 
-        zipIn.extract(tt, path=datadir + 'test')
+        zipIn.extract(tt, path=dumpdir + 'test')
 
     zipIn.close()
 
     return
 
 
-def parallel_run(args, datadir):
+def parallel_run(args, datadir, dumpdir=None):
+
+    if dumpdir is None:
+        dumpdir = datadir
 
     gpu = args.local_rank
                
@@ -98,29 +104,37 @@ def parallel_run(args, datadir):
     pattern = ['_L','_M','_H']
     img_dim = 96
 
-    train_set = cmt.single_cell_dataset(datadir + 'train/', img_dim)
+    if torch.cuda.is_available() == True:
+        pinning = True
+    else:
+        pinning = False
+
+    train_set = cmt.single_cell_dataset(dumpdir + 'train' + fs, img_dim)
     wghts = train_set.get_class_weights(pattern)
 
     # train_sampler = WeightedRandomSampler(torch.from_numpy(wghts), len(wghts))
     # train_sampler = torch.utils.data.distributed.DistributedSampler(train_set, num_replicas=args.world_size, rank=args.local_rank)
     train_sampler = cmt.WeightedDistributedSampler(train_set, wghts, num_replicas=args.world_size, rank=args.local_rank)
-
-    test_set = cmt.single_cell_dataset(datadir + 'test/', img_dim)
-    wghts = test_set.get_class_weights(pattern)
-    
-    test_sampler = cmt.WeightedDistributedSampler(test_set, wghts, num_replicas=args.world_size, rank=args.local_rank)
-
-    train_randloader = DataLoader(train_set, batch_size=bsize, sampler = train_sampler, pin_memory = True)#, num_workers= 4) #  shuffle=True,
+    train_randloader = DataLoader(train_set, batch_size=bsize, sampler = train_sampler, pin_memory = pinning)#, num_workers= 4) #  shuffle=True,
 
     # total = np.vstack([i[1].detach().numpy() for i in valid_data])
     # u, c = np.unique(total, return_counts=True)
     # print('class balance training')
     # print(c / np.sum(c))
-
-    test_randloader = DataLoader(test_set, batch_size=bsize,  sampler = test_sampler, pin_memory = True)#, num_workers=4) # shuffle=True,
+    test_set = cmt.single_cell_dataset(dumpdir + 'test' + fs, img_dim)
+    wghts = test_set.get_class_weights(pattern)    
+    test_sampler = cmt.WeightedDistributedSampler(test_set, wghts, num_replicas=args.world_size, rank=args.local_rank)
+    test_randloader = DataLoader(test_set, batch_size=bsize,  sampler = test_sampler, pin_memory = pinning)#, num_workers=4) # shuffle=True,
 
     cnetmodel = cmt.ConvNet(train_randloader, test_randloader, 5e-2)
     cnetmodel.net.cuda(gpu)
+
+    if dist.get_rank() == 0:
+        # summary(cnetLSTMmodel)
+        print('model params')
+        print(len([i for i in cnetmodel.net.named_parameters()]))
+        # print(len([i for i in cnetLSTMmodel.lstm.named_parameters()]))
+
     cnetmodel.net = torch.nn.parallel.DistributedDataParallel(cnetmodel.net, device_ids=[gpu])
     
     lossL = cnetmodel.train(250, len(train_set))
